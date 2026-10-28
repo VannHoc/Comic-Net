@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<actions>
+  <action><actionName>run</actionName><goals><goal>org.codehaus.mojo:exec-maven-plugin:3.6.3:exec</goal></goals><properties><exec.executable>powershell.exe</exec.executable><exec.args>-NoProfile -ExecutionPolicy Bypass -File ../deploy/Start-Backend.ps1 -Mode Run -FromSource -UseLocalConfiguration</exec.args></properties></action>
+  <action><actionName>debug</actionName><goals><goal>org.codehaus.mojo:exec-maven-plugin:3.6.3:exec</goal></goals><properties><exec.executable>powershell.exe</exec.executable><exec.args>-NoProfile -ExecutionPolicy Bypass -File ../deploy/Start-Backend.ps1 -Mode Run -FromSource -UseLocalConfiguration -Debug</exec.args></properties></action>
+</actions>

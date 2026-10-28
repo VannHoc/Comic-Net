@@ -1,0 +1,14 @@
+**/target/
+.local/
+.env
+.env.*
+!.env.example
+**/nb-configuration.xml
+**/nbproject/private/
+*.log
+*.jks
+*.p12
+*.pem
+*.key
+# Private SSMS working copy may contain passwords; publish only the sanitized template.
+/deploy/sql/01_provision_development.sql

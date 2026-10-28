@@ -1,0 +1,23 @@
+COMIC NET · QUY TRÌNH BACKUP / RESTORE DEVELOPMENT · v1 · 2026-10-27
+
+Người vận hành thực hiện bằng SSMS và công cụ lưu trữ. Màn hình này chỉ cung cấp hướng dẫn; trạng thái health hoặc một dòng audit không chứng minh đã phục hồi dữ liệu.
+
+1. Chuẩn bị
+Ghi thời điểm UTC, phiên bản ứng dụng và Flyway schema. Tạm dừng backend để không có thay đổi SQL hoặc asset trong lúc chụp. Giữ riêng bộ khóa JWT/mail và cấu hình dịch vụ trong kho bí mật; không đưa mật khẩu vào báo cáo hay Git.
+
+2. Sao lưu SQL Server
+Đăng nhập SSMS bằng tài khoản vận hành có quyền backup. Chọn ComicNetDev → Tasks → Back Up → Full. Lưu tệp .bak vào thư mục backup được SQL Server service cho phép ghi. Bật checksum và thực hiện RESTORE VERIFYONLY WITH CHECKSUM. Ghi tên tệp, thời điểm, kích thước và SHA-256 vào biên bản local.
+
+3. Sao lưu object storage
+Sau khi backend đã dừng, dừng dịch vụ RustFS Development để chụp nhất quán. Sao chép toàn bộ dữ liệu volume .local/data/rustfs bằng công cụ backup hoặc ổ lưu riêng; giữ phiên bản RustFS tương ứng. Lập manifest khóa object + kích thước + checksum từ snapshot và đối chiếu DigitalAsset / AssetVariant cùng staging của job đang hoạt động. Không đưa signed URL hoặc access key vào manifest công khai. Khởi động storage rồi backend sau khi chụp xong.
+
+4. Phục hồi mẫu vào đích riêng
+Trong SSMS, dùng RESTORE FILELISTONLY để xác định logical file names. Restore bản .bak thành database kiểm chứng có tên riêng, dùng WITH MOVE đến tệp .mdf/.ldf mới. Không dùng WITH REPLACE và không ghi đè ComicNetDev. Chạy DBCC CHECKDB trên database kiểm chứng. Phục hồi snapshot object storage vào volume riêng và endpoint local khác. Script deploy/sql/12_backup_restore_development_sample.sql hỗ trợ database hai logical files. Backend kiểm chứng dùng profile local, RESTORE_VERIFICATION=true, DB_NAME=ComicNetRestoreQA_<12 ký tự hex thường>, SETUP_ENABLED=false, spring.flyway.enabled=false, comicnet.mail.worker-enabled=false, comicnet.upload.worker-enabled=false và S3_ENDPOINT của volume đã phục hồi. Không trỏ backend kiểm chứng vào storage đang dùng.
+
+5. Kiểm chứng
+Đối chiếu số migration, số bản ghi lõi, foreign key và checksum object trong manifest. Kiểm tra đăng nhập bằng tài khoản kiểm chứng, catalog, một chapter đã publish, signed JPEG/PNG, stable PageId, bookmark/progress và job chưa hoàn tất. DBCC CHECKDB sạch chỉ xác nhận cấu trúc SQL; vẫn phải kiểm tra dữ liệu ảnh. Ghi PASS/FAIL và lỗi còn lại. Không tuyên bố đã restore nếu chỉ có backup/VERIFYONLY.
+
+6. Lưu evidence
+Lưu biên bản bên ngoài source public: phiên bản, đường dẫn backup/snapshot, checksum, thời gian UTC, đích restore riêng, kết quả DBCC và các luồng đã kiểm tra. Audit ứng dụng hiển thị ở tab Audit; lịch sử backup/restore SQL xem tại msdb trong SSMS. Mật khẩu, khóa mail, JWT private key và token không thuộc biên bản công khai.
+
+Phạm vi Development: RustFS native Windows chỉ dùng localhost. Quy trình Production, backup tự động và khôi phục thảm họa được hoàn thiện theo roadmap; người vận hành phải dùng storage/certificate được hỗ trợ cho môi trường đó.
