@@ -113,6 +113,10 @@ public class SecurityConfiguration {
                     .authenticated()
                     .requestMatchers("/api/v1/community/**")
                     .authenticated()
+                    .requestMatchers("/api/v1/gamification/**")
+                    .authenticated()
+                    .requestMatchers("/api/v1/notifications", "/api/v1/notifications/**")
+                    .authenticated()
                     .requestMatchers(
                         HttpMethod.GET,
                         "/api/v1/translations/*/chapters",

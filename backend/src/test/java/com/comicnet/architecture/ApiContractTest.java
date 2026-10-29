@@ -79,7 +79,7 @@ class ApiContractTest {
         }
       }
     }
-    assertThat(expected).hasSize(161);
+    assertThat(expected).hasSize(174);
     assertThat(actual).containsExactlyInAnyOrderElementsOf(expected);
   }
 

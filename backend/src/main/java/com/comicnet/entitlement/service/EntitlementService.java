@@ -57,6 +57,7 @@ public class EntitlementService implements ReadingAccess, EntitlementGrants {
   }
 
   /** Called only by a purchase that has already locked the user in the same SQL transaction. */
+  @Override
   @Transactional
   public void grantPurchase(long userId, long chapterId, long purchaseId) {
     long entitlementId = jdbc.queryForObject(
@@ -65,5 +66,20 @@ public class EntitlementService implements ReadingAccess, EntitlementGrants {
         Long.class, userId, chapterId);
     jdbc.update("INSERT dbo.EntitlementGrant(EntitlementId,SourceType,SourceId)"
         + " VALUES(?,'PURCHASE',?)", entitlementId, purchaseId);
+  }
+
+  @Override
+  @Transactional
+  public boolean revokePurchase(long userId, long chapterId, long actorUserId, String reason) {
+    var rows = jdbc.query(
+        "SELECT Id FROM dbo.UserEntitlement WHERE UserId=? AND ChapterId=? AND Kind='PURCHASE' AND State='ACTIVE'",
+        (rs, n) -> rs.getLong(1), userId, chapterId);
+    if (rows.isEmpty()) return false;
+    for (Long entitlementId : rows) {
+      jdbc.update("UPDATE dbo.UserEntitlement SET State='REVOKED', ValidTo=SYSUTCDATETIME() WHERE Id=?", entitlementId);
+      jdbc.update("INSERT dbo.EntitlementRevocation(EntitlementId,Reason,ActorUserId) VALUES(?,?,?)",
+          entitlementId, reason, actorUserId);
+    }
+    return true;
   }
 }

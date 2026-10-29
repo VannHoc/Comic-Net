@@ -21,6 +21,7 @@ public final class ReaderPanel extends JPanel implements Workspace {
   private final ApiClient api;
   private final MediaTransport media;
   private final Consumer<ReaderLocation> navigate;
+  private final Runnable back;
   private final UiTasks loading = new UiTasks(),
       preferences = new UiTasks(),
       bookmarks = new UiTasks(),
@@ -30,15 +31,25 @@ public final class ReaderPanel extends JPanel implements Workspace {
       saveMessage = Theme.plainLabel(" ");
   private final JComboBox<String> mode = new JComboBox<>(new String[] {"Cuộn dọc", "Từng trang"}),
       direction = new JComboBox<>(new String[] {"Trái → phải", "Phải → trái"}),
-      fit = new JComboBox<>(new String[] {"Vừa chiều rộng", "Vừa chiều cao"});
+      fit = new JComboBox<>(new String[] {"Vừa chiều rộng", "Vừa chiều cao", "Kích thước gốc"});
   private final JSpinner page = new JSpinner(new SpinnerNumberModel(1, 1, 1, 1));
+  private final JSlider progress = new JSlider(1, 1, 1), zoom = new JSlider(50, 200, 100);
+  private final JLabel pageCount = Theme.plainLabel("0 / 0");
+  private final JButton previousChapter = button("‹ Trước", () -> adjacent(false)),
+      nextChapter = button("Sau ›", () -> adjacent(true));
+  private final JPanel chapterList = new JPanel();
+  private final JScrollPane chapterScroll = new JScrollPane(chapterList);
+  private final JPanel chapterDrawer = new JPanel(new BorderLayout());
+  private final JPopupMenu settings = new JPopupMenu();
+  private String translationId;
+  private boolean syncingProgress;
   private final JPanel pages = new JPanel();
   private final JScrollPane viewport = new JScrollPane(pages);
   private final ReaderComfort comfort;
   private final List<PageView> views = new ArrayList<>();
   private final LinkedHashMap<Integer, BufferedImage> cache = new LinkedHashMap<>(8, .75f, true);
   private final Map<Integer, CompletableFuture<?>> imageRequests = new HashMap<>();
-  private final javax.swing.Timer viewportTimer, saveTimer;
+  private final javax.swing.Timer viewportTimer, saveTimer, accessTimer;
   private JsonNode manifest;
   private String chapterId, preferenceEtag;
   private int historyGeneration;
@@ -51,7 +62,8 @@ public final class ReaderPanel extends JPanel implements Workspace {
       anchorUnavailable,
       visibleWorkspace,
       renewing,
-      mediaRenewalBlocked;
+      mediaRenewalBlocked,
+      checkingAccess;
   private final MutationKey bookmarkKey = new MutationKey();
   private final MutationKey unlockKey = new MutationKey();
   private ReaderLocation anchor, dirty;
@@ -62,10 +74,15 @@ public final class ReaderPanel extends JPanel implements Workspace {
   private record PendingSave(ReaderLocation location, Map<String, Object> body) {}
 
   public ReaderPanel(ApiClient api, MediaTransport media, Consumer<ReaderLocation> navigate) {
-    super(new BorderLayout(0, 12));
+    this(api, media, navigate, () -> {});
+  }
+
+  public ReaderPanel(ApiClient api, MediaTransport media, Consumer<ReaderLocation> navigate, Runnable back) {
+    super(new BorderLayout(0, 8));
     this.api = api;
     this.media = media;
     this.navigate = navigate;
+    this.back = back;
     comfort =
         new ReaderComfort(
             this,
@@ -76,47 +93,57 @@ public final class ReaderPanel extends JPanel implements Workspace {
                     && !views.isEmpty()
                     && mode.getSelectedIndex() == 0
                     && !anchorUnavailable);
-    setOpaque(false);
-    setBorder(new EmptyBorder(20, 24, 16, 24));
-    title.setFont(Theme.heading(22));
-    JPanel header = new JPanel(new BorderLayout(0, 10));
-    header.setOpaque(false);
-    header.add(title, BorderLayout.NORTH);
-    JPanel controls =
-        row(
-            button("Chương trước", () -> adjacent(false)),
-            button("Chương sau", () -> adjacent(true)),
-            mode,
-            direction,
-            fit,
-            button("‹", () -> move(-1)),
-            page,
-            button("›", () -> move(1)),
-            button("Tải lại ảnh", this::renew),
-            button("Bình luận trang", this::pageComments));
-    header.add(controls);
-    header.add(row(comfort.controls()), BorderLayout.SOUTH);
-    add(header, BorderLayout.NORTH);
-    pages.setLayout(new BoxLayout(pages, BoxLayout.Y_AXIS));
-    pages.setBackground(Theme.BACKGROUND);
-    viewport.setBorder(null);
-    viewport.getVerticalScrollBar().setUnitIncrement(28);
-    add(viewport);
-    JPanel footer = new JPanel(new BorderLayout());
-    footer.setOpaque(false);
-    footer.add(
-        row(
-            button("Đặt bookmark", this::bookmark),
-            button("Lưu lại vị trí", this::saveExplicit),
-            button("Lưu thiết lập", this::savePreferences),
-            message),
-        BorderLayout.NORTH);
-    footer.add(saveMessage, BorderLayout.SOUTH);
-    add(footer, BorderLayout.SOUTH);
     viewportTimer = new javax.swing.Timer(130, e -> viewportChanged());
     viewportTimer.setRepeats(false);
     saveTimer = new javax.swing.Timer(1200, e -> save());
     saveTimer.setRepeats(false);
+    accessTimer = new javax.swing.Timer(30_000, e -> checkAccess());
+    setOpaque(false);
+    setBorder(new EmptyBorder(10, 12, 10, 12));
+    title.setFont(Theme.heading(18));
+    JPanel header = new JPanel(new BorderLayout(0, 4));
+    header.setOpaque(false);
+    JButton backButton = button("←", back);
+    backButton.setToolTipText("Quay lại Khám phá");
+    header.add(title, BorderLayout.NORTH);
+    JButton chapters = button("Chương", this::toggleChapters);
+    JButton options = button("Cài đặt", () -> settings.show(this, Math.max(0, getWidth() - 370), 54));
+    JButton bookmarkButton = button("Lưu dấu", this::bookmark);
+    JButton full = button("F11", comfort::toggleFullscreen);
+    for (JButton control : new JButton[] {previousChapter, nextChapter, chapters, options, bookmarkButton, full})
+      control.setToolTipText(control.getText());
+    header.add(scrollableControls(backButton, previousChapter, nextChapter, chapters, options, bookmarkButton, full), BorderLayout.CENTER);
+    add(header, BorderLayout.NORTH);
+    pages.setLayout(new BoxLayout(pages, BoxLayout.Y_AXIS));
+    pages.setBackground(Theme.SURFACE);
+    viewport.setBorder(null);
+    viewport.getVerticalScrollBar().setUnitIncrement(28);
+    JPanel readingArea = new JPanel(new BorderLayout(8, 0));
+    readingArea.add(viewport, BorderLayout.CENTER);
+    chapterList.setLayout(new BoxLayout(chapterList, BoxLayout.Y_AXIS));
+    chapterList.setBackground(Theme.SURFACE);
+    chapterScroll.setBorder(null);
+    chapterScroll.getVerticalScrollBar().setUnitIncrement(28);
+    chapterDrawer.setBorder(BorderFactory.createLineBorder(Theme.BORDER));
+    chapterDrawer.setPreferredSize(new Dimension(240, 100));
+    chapterDrawer.add(row(Theme.plainLabel("Danh sách chương"), button("Đóng", this::toggleChapters)), BorderLayout.NORTH);
+    chapterDrawer.add(chapterScroll);
+    chapterDrawer.setVisible(false);
+    readingArea.add(chapterDrawer, BorderLayout.EAST);
+    add(readingArea, BorderLayout.CENTER);
+    JPanel footer = new JPanel(new BorderLayout());
+    footer.setOpaque(false);
+    progress.setPreferredSize(new Dimension(220, 30));
+    progress.addChangeListener(e -> { if (!syncingProgress && !progress.getValueIsAdjusting() && manifest != null) userJump(progress.getValue() - 1); });
+    zoom.setPreferredSize(new Dimension(110, 30));
+    zoom.setToolTipText("Thu phóng ảnh 50–200%");
+    zoom.addChangeListener(e -> { if (manifest != null) { resizePages(); pages.revalidate(); pages.repaint(); viewportTimer.restart(); } });
+    footer.add(scrollableControls(pageCount, progress, Theme.plainLabel("Zoom"),
+        button("-", () -> zoom.setValue(Math.max(50, zoom.getValue()-10))), zoom,
+        button("+", () -> zoom.setValue(Math.min(200, zoom.getValue()+10))), comfort.autoControl()), BorderLayout.CENTER);
+    footer.add(row(message, saveMessage), BorderLayout.SOUTH);
+    add(footer, BorderLayout.SOUTH);
+    buildSettings();
     viewport.getViewport().addChangeListener(e -> viewportTimer.restart());
     viewport.addComponentListener(
         new ComponentAdapter() {
@@ -151,10 +178,90 @@ public final class ReaderPanel extends JPanel implements Workspace {
     return row;
   }
 
+  private JScrollPane scrollableControls(Component... components) {
+    JPanel line = new JPanel(new FlowLayout(FlowLayout.LEFT, 7, 4));
+    line.setOpaque(false);
+    for (Component component : components) line.add(component);
+    JScrollPane scroll = new JScrollPane(line, ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER,
+        ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+    scroll.setBorder(null);
+    scroll.setOpaque(false);
+    scroll.getViewport().setOpaque(false);
+    scroll.getHorizontalScrollBar().setUnitIncrement(24);
+    scroll.setPreferredSize(new Dimension(200, 48));
+    return scroll;
+  }
+
   private JButton button(String text, Runnable action) {
     JButton button = new JButton(text);
     button.addActionListener(e -> action.run());
     return button;
+  }
+
+  private void buildSettings() {
+    JPanel content = new JPanel();
+    content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+    content.setBorder(new EmptyBorder(10, 12, 10, 12));
+    content.setPreferredSize(new Dimension(320, 470));
+    JSlider popupZoom = new JSlider(50, 200, zoom.getValue());
+    popupZoom.setPreferredSize(new Dimension(150, 28));
+    popupZoom.addChangeListener(e -> zoom.setValue(popupZoom.getValue()));
+    zoom.addChangeListener(e -> { if (popupZoom.getValue() != zoom.getValue()) popupZoom.setValue(zoom.getValue()); });
+    JComboBox<String> background = new JComboBox<>(new String[] {"Sáng", "Xám", "Đen"});
+    background.addActionListener(e -> {
+      pages.setBackground(switch (background.getSelectedIndex()) {
+        case 1 -> new Color(0xE5E7EB);
+        case 2 -> new Color(0x20242B);
+        default -> Theme.SURFACE;
+      });
+      pages.repaint();
+    });
+    for (JComponent line : new JComponent[] {
+        row(Theme.plainLabel("Kiểu đọc"), mode), row(Theme.plainLabel("Hướng đọc"), direction),
+        row(Theme.plainLabel("Hiển thị ảnh"), fit),
+        row(Theme.plainLabel("Tốc độ tự cuộn"), comfort.speedControl()),
+        row(Theme.plainLabel("Độ sáng"), comfort.brightnessControl()),
+        row(Theme.plainLabel("Zoom"), popupZoom), row(Theme.plainLabel("Nền đọc"), background),
+        row(button("Bình luận trang", this::pageComments), button("Tải lại ảnh", this::renew)),
+        row(button("Lưu vị trí", this::saveExplicit), button("Lưu thiết lập", this::savePreferences))
+    }) content.add(line);
+    settings.add(content);
+  }
+
+  private void toggleChapters() {
+    chapterDrawer.setVisible(!chapterDrawer.isVisible());
+    if (chapterDrawer.isVisible()) loadChapterList(0);
+    revalidate();
+  }
+
+  private void loadChapterList(int number) {
+    if (translationId == null || translationId.isBlank()) {
+      chapterList.removeAll();
+      chapterList.add(Theme.plainLabel("Không có danh sách chương cho bản xem trước."));
+      chapterList.revalidate();
+      return;
+    }
+    api.get("/translations/" + translationId + "/chapters?page=" + number + "&size=50")
+        .whenComplete((reply, error) -> SwingUtilities.invokeLater(() -> {
+          if (error != null) {
+            chapterList.add(button("Không tải được · Thử lại", () -> loadChapterList(number)));
+          } else {
+            if (number == 0) chapterList.removeAll();
+            JsonNode items = reply.body().path("items");
+            for (JsonNode item : items) {
+              String id = item.path("id").asText();
+              JButton chapter = button(item.path("displayNumber").asText() + " · " + item.path("title").asText(),
+                  () -> { chapterDrawer.setVisible(false); navigate.accept(ReaderLocation.chapter(id)); });
+              chapter.setAlignmentX(LEFT_ALIGNMENT);
+              chapter.setToolTipText(chapter.getText());
+              if (id.equals(chapterId)) chapter.setBackground(new Color(0xFFE5DF));
+              chapterList.add(chapter);
+            }
+            if (items.size() == 50) chapterList.add(button("Xem thêm chương", () -> loadChapterList(number + 1)));
+            if (number == 0 && items.isEmpty()) chapterList.add(Theme.plainLabel("Chưa có chương công khai."));
+          }
+          chapterList.revalidate(); chapterList.repaint();
+        }));
   }
 
   private void bindKey(int key, Runnable action) {
@@ -213,6 +320,7 @@ public final class ReaderPanel extends JPanel implements Workspace {
             .thenCompose(
                 context -> {
                   String comic = context.body().path("comicId").asText();
+                  translationId = context.body().path("translationId").asText();
                   return api.get("/chapters/" + chapterId + "/manifest?displayFormat=JPEG")
                       .thenApply(
                           images -> {
@@ -231,6 +339,7 @@ public final class ReaderPanel extends JPanel implements Workspace {
           title.setText(reply.etag());
           acceptManifest(reply.body());
           loadPersonalState(expected);
+          accessTimer.start();
         },
         error -> {
           if (expected != generation) return;
@@ -301,6 +410,11 @@ public final class ReaderPanel extends JPanel implements Workspace {
     if (preview || chapterId == null) return;
     api.request("POST", "/chapters/" + chapterId + "/completion", null, null)
         .exceptionally(ignored -> null);
+    try {
+      long id = Long.parseLong(chapterId);
+      api.request("POST", "/gamification/reading-exp", Map.of("chapterId", id), null)
+          .exceptionally(ignored -> null);
+    } catch (NumberFormatException ignored) {}
   }
 
   /** A scoped draft manifest has already passed the backend's preview authorization. */
@@ -310,6 +424,7 @@ public final class ReaderPanel extends JPanel implements Workspace {
     preview = true;
     visibleWorkspace = true;
     chapterId = draft.path("chapterId").asText();
+    translationId = null;
     initialLocation = null;
     generation++;
     title.setText("Xem trước bản biên tập · Không lưu tiến độ");
@@ -325,7 +440,10 @@ public final class ReaderPanel extends JPanel implements Workspace {
     cancelImages();
     saveTimer.stop();
     viewportTimer.stop();
+    accessTimer.stop();
+    checkingAccess = false;
     manifest = null;
+    translationId = null;
     pages.removeAll();
     views.clear();
     anchor = null;
@@ -348,10 +466,22 @@ public final class ReaderPanel extends JPanel implements Workspace {
     int count = value.path("pages").size();
     if (count == 0) {
       message.setText("Chương chưa có trang để đọc.");
+      pageCount.setText("0 / 0");
+      pages.removeAll();
+      JLabel empty = Theme.plainLabel("Chương này chưa có ảnh. Hãy quay lại hoặc tải lại chương.");
+      empty.setAlignmentX(CENTER_ALIGNMENT);
+      empty.setBorder(new EmptyBorder(56, 16, 56, 16));
+      pages.add(empty);
+      pages.revalidate(); pages.repaint();
       return;
     }
     adjusting = true;
     page.setModel(new SpinnerNumberModel(1, 1, count, 1));
+    syncingProgress = true;
+    progress.setMaximum(count);
+    progress.setValue(1);
+    pageCount.setText("1 / " + count);
+    syncingProgress = false;
     adjusting = false;
     renderPages();
     if (initialLocation != null && initialLocation.pageId() != null) restore(initialLocation);
@@ -374,7 +504,8 @@ public final class ReaderPanel extends JPanel implements Workspace {
           adjusting = true;
           mode.setSelectedIndex(reply.body().path("mode").asText().equals("PAGED") ? 1 : 0);
           direction.setSelectedIndex(reply.body().path("direction").asText().equals("RTL") ? 1 : 0);
-          fit.setSelectedIndex(reply.body().path("fit").asText().equals("HEIGHT") ? 1 : 0);
+          String savedFit = reply.body().path("fit").asText();
+          fit.setSelectedIndex(savedFit.equals("ORIGINAL") ? 2 : savedFit.equals("HEIGHT") ? 1 : 0);
           adjusting = false;
           renderPages();
           if (anchor != null) restore(anchor);
@@ -464,10 +595,11 @@ public final class ReaderPanel extends JPanel implements Workspace {
     for (PageView view : views) {
       JsonNode info = manifest.path("pages").get(view.index);
       int w = info.path("width").asInt(1), h = info.path("height").asInt(1);
-      double scale =
-          fit.getSelectedIndex() == 1
+      double scale = fit.getSelectedIndex() == 2 ? 1
+          : fit.getSelectedIndex() == 1
               ? Math.min((double) availableHeight / h, (double) availableWidth / w)
               : (double) availableWidth / w;
+      scale *= zoom.getValue() / 100.0;
       view.setPreferredSize(
           new Dimension(Math.max(1, (int) (w * scale)), Math.max(1, (int) (h * scale))));
       view.setMaximumSize(new Dimension(Integer.MAX_VALUE, Math.max(1, (int) (h * scale))));
@@ -491,6 +623,10 @@ public final class ReaderPanel extends JPanel implements Workspace {
     adjusting = true;
     page.setValue(current + 1);
     adjusting = false;
+    syncingProgress = true;
+    progress.setValue(current + 1);
+    pageCount.setText((current + 1) + " / " + views.size());
+    syncingProgress = false;
     PageView view = views.get(current);
     double offset =
         mode.getSelectedIndex() == 0
@@ -569,10 +705,12 @@ public final class ReaderPanel extends JPanel implements Workspace {
                     imageRequests.remove(index);
                     if (error == null) cache.put(index, image);
                     else views.get(index).failed = true;
+                    views.get(index).retry.setVisible(error != null);
                     views.get(index).repaint();
                   }));
     } catch (IllegalArgumentException error) {
       views.get(index).failed = true;
+      views.get(index).retry.setVisible(true);
     }
   }
 
@@ -602,7 +740,7 @@ public final class ReaderPanel extends JPanel implements Workspace {
           }
           manifest = reply.body();
           cancelImages();
-          views.forEach(view -> view.failed = false);
+          views.forEach(view -> { view.failed = false; view.retry.setVisible(false); });
           viewportTimer.restart();
         },
         error -> {
@@ -610,6 +748,26 @@ public final class ReaderPanel extends JPanel implements Workspace {
           mediaRenewalBlocked = true;
           message.setText("Chưa cấp lại được ảnh. Nhấn Tải lại ảnh để thử lại.");
         });
+  }
+
+  /** Recheck server access while a chapter stays open, including revocation on another device. */
+  void checkAccess() {
+    if (checkingAccess || preview || !visibleWorkspace || manifest == null || chapterId == null
+        || !api.signedIn()) return;
+    checkingAccess = true;
+    long expected = generation;
+    String chapter = chapterId;
+    api.get("/chapters/" + chapter + "/access").whenComplete((reply, error) ->
+        SwingUtilities.invokeLater(() -> {
+          if (expected != generation || !chapter.equals(chapterId)) return;
+          checkingAccess = false;
+          if (error != null) return; // Transient network errors do not prove access was revoked.
+          if (reply.body().path("allowed").asBoolean()) return;
+          reset();
+          message.setText("Quyền đọc chương đã thay đổi. Nhấn Tải lại ảnh để kiểm tra lại.");
+          pages.revalidate();
+          pages.repaint();
+        }));
   }
 
   private void cancelImages() {
@@ -633,6 +791,10 @@ public final class ReaderPanel extends JPanel implements Workspace {
     adjusting = true;
     page.setValue(index + 1);
     adjusting = false;
+    syncingProgress = true;
+    progress.setValue(index + 1);
+    pageCount.setText((index + 1) + " / " + views.size());
+    syncingProgress = false;
     if (mode.getSelectedIndex() == 1) renderPages();
     SwingUtilities.invokeLater(
         () -> {
@@ -712,7 +874,7 @@ public final class ReaderPanel extends JPanel implements Workspace {
                 "direction",
                 direction.getSelectedIndex() == 0 ? "LTR" : "RTL",
                 "fit",
-                fit.getSelectedIndex() == 0 ? "WIDTH" : "HEIGHT"),
+                fit.getSelectedIndex() == 0 ? "WIDTH" : fit.getSelectedIndex() == 1 ? "HEIGHT" : "ORIGINAL"),
             preferenceEtag),
         reply -> {
           preferenceEtag = reply.etag();
@@ -910,11 +1072,16 @@ public final class ReaderPanel extends JPanel implements Workspace {
 
   private final class PageView extends JPanel {
     private final int index;
+    private final JButton retry;
     private boolean failed;
 
     PageView(int index) {
       this.index = index;
+      retry = button("Tải lại trang", this::retryImage);
       setOpaque(false);
+      setLayout(new GridBagLayout());
+      add(retry);
+      retry.setVisible(false);
       setAlignmentX(CENTER_ALIGNMENT);
       getAccessibleContext().setAccessibleName("Trang " + (index + 1));
       addMouseListener(
@@ -930,6 +1097,13 @@ public final class ReaderPanel extends JPanel implements Workspace {
           });
     }
 
+    private void retryImage() {
+      failed = false;
+      retry.setVisible(false);
+      loadImage(index);
+      repaint();
+    }
+
     @Override
     protected void paintComponent(Graphics graphics) {
       super.paintComponent(graphics);
@@ -939,22 +1113,19 @@ public final class ReaderPanel extends JPanel implements Workspace {
         graphics.setFont(Theme.label(14));
         graphics.drawString(
             failed
-                ? "Không tải được trang " + (index + 1) + " · Nhấn để thử lại, hoặc Tải lại ảnh"
+                ? "Không tải được trang " + (index + 1)
                 : "Đang tải trang " + (index + 1) + "…",
             24,
             48);
         return;
       }
       JsonNode info = manifest.path("pages").get(index);
-      int width =
-          (int)
-              Math.min(
-                  getWidth(),
-                  (double) getHeight()
-                      * info.path("width").asInt()
-                      / Math.max(1, info.path("height").asInt()));
-      graphics.drawImage(image, (getWidth() - width) / 2, 0, width, getHeight(), null);
-      comfort.paintShade(graphics, (getWidth() - width) / 2, width, getHeight());
+      double scale = Math.min((double) getWidth() / image.getWidth(), (double) getHeight() / image.getHeight());
+      int width = Math.max(1, (int) (image.getWidth() * scale));
+      int height = Math.max(1, (int) (image.getHeight() * scale));
+      int x = (getWidth() - width) / 2, y = (getHeight() - height) / 2;
+      graphics.drawImage(image, x, y, width, height, null);
+      comfort.paintShade(graphics, x, y, width, height);
     }
   }
 }

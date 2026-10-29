@@ -1,11 +1,12 @@
 package com.comicnet.desktop.features.recommendation;
 
 import com.comicnet.desktop.client.api.ApiClient;
-import com.comicnet.desktop.ui.RemoteTable;
+import com.comicnet.desktop.ui.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.util.function.Consumer;
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 
 public final class RecommendationDialog extends JDialog {
   public RecommendationDialog(Component owner, ApiClient api, String comic, Consumer<String> open) {
@@ -14,6 +15,11 @@ public final class RecommendationDialog extends JDialog {
         comic == null ? "Gợi ý khám phá" : "Truyện tương tự",
         Dialog.ModalityType.APPLICATION_MODAL);
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+
+    JPanel contentPane = new JPanel(new BorderLayout(0, 12));
+    contentPane.setBackground(Theme.BACKGROUND);
+    contentPane.setBorder(new EmptyBorder(16, 18, 16, 18));
+
     RemoteTable table =
         new RemoteTable(
             api,
@@ -25,8 +31,17 @@ public final class RecommendationDialog extends JDialog {
                         : "/comics/" + comic + "/similar?size=20")
                     : null,
             item -> new Object[] {item.path("title").asText(), item.path("type").asText()});
-    add(table);
-    JButton select = new JButton("Mở truyện đã chọn");
+    contentPane.add(table, BorderLayout.CENTER);
+
+    JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+    footer.setOpaque(false);
+
+    JButton close = new JButton("Đóng");
+    close.setFont(Theme.label(13));
+    close.addActionListener(e -> dispose());
+
+    PrimaryButton select = new PrimaryButton("Mở truyện đã chọn");
+    select.setIcon(UiIcons.bookOpen(14, Color.WHITE));
     select.addActionListener(
         e -> {
           var item = table.selected();
@@ -36,7 +51,12 @@ public final class RecommendationDialog extends JDialog {
             open.accept(id);
           }
         });
-    add(select, BorderLayout.SOUTH);
+
+    footer.add(close);
+    footer.add(select);
+    contentPane.add(footer, BorderLayout.SOUTH);
+
+    setContentPane(contentPane);
     getRootPane()
         .registerKeyboardAction(
             e -> dispose(),
@@ -49,7 +69,8 @@ public final class RecommendationDialog extends JDialog {
             table.close();
           }
         });
-    setSize(760, 560);
+    setSize(800, 580);
+    setMinimumSize(new Dimension(680, 480));
     setLocationRelativeTo(owner);
     table.first();
   }

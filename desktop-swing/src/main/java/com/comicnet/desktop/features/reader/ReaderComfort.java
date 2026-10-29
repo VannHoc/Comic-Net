@@ -53,7 +53,12 @@ final class ReaderComfort implements AutoCloseable {
     };
   }
 
+  JToggleButton autoControl() { return auto; }
+  JSlider speedControl() { return speed; }
+  JSlider brightnessControl() { return brightness; }
+
   void tick(long now) {
+    if (!auto.isSelected()) return;
     Window window = SwingUtilities.getWindowAncestor(reader);
     if (!canScroll.getAsBoolean() || (window != null && !window.isFocused())) {
       pause();
@@ -71,15 +76,19 @@ final class ReaderComfort implements AutoCloseable {
     if (bar.getValue() >= end) pause();
   }
 
-  void paintShade(Graphics graphics, int x, int width, int height) {
+  void paintShade(Graphics graphics, int x, int y, int width, int height) {
     if (brightness.getValue() == 100) return;
     Graphics2D copy = (Graphics2D) graphics.create();
     try {
       copy.setColor(new Color(0, 0, 0, (100 - brightness.getValue()) * 255 / 100));
-      copy.fillRect(x, 0, width, height);
+      copy.fillRect(x, y, width, height);
     } finally {
       copy.dispose();
     }
+  }
+
+  void paintShade(Graphics graphics, int x, int width, int height) {
+    paintShade(graphics, x, 0, width, height);
   }
 
   void pause() {
@@ -105,7 +114,7 @@ final class ReaderComfort implements AutoCloseable {
             });
   }
 
-  private void toggleFullscreen() {
+  void toggleFullscreen() {
     if (fullscreen != null) {
       exitFullscreen();
       return;

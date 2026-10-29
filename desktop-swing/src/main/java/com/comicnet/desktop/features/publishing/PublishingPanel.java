@@ -47,10 +47,26 @@ public final class PublishingPanel extends JPanel implements Workspace {
     this.api = api;
     this.preview = preview;
     setOpaque(false);
-    setBorder(new EmptyBorder(26, 30, 20, 30));
+    setBorder(new EmptyBorder(Theme.CONTENT_PADDING, Theme.CONTENT_PADDING, 24, Theme.CONTENT_PADDING));
+    JPanel header = new JPanel(new BorderLayout(0, 4));
+    header.setOpaque(false);
+    JLabel eyebrow = Theme.plainLabel("CREATOR STUDIO");
+    eyebrow.setForeground(Theme.PRIMARY);
+    eyebrow.setFont(Theme.heading(11));
     JLabel heading = new JLabel("Xưởng xuất bản");
     heading.setFont(Theme.heading(28));
-    add(heading, BorderLayout.NORTH);
+    heading.setForeground(Theme.TEXT);
+    JLabel sub = Theme.plainLabel("Quản lý tác phẩm, bản dịch, chương truyện và quy trình duyệt ấn bản.");
+    sub.setFont(Theme.label(13));
+    sub.setForeground(Theme.MUTED);
+
+    JPanel titleBox = new JPanel(new GridLayout(0, 1, 0, 2));
+    titleBox.setOpaque(false);
+    titleBox.add(eyebrow);
+    titleBox.add(heading);
+    titleBox.add(sub);
+    header.add(titleBox, BorderLayout.WEST);
+    add(header, BorderLayout.NORTH);
     comics =
         new RemoteTable(
             api,
@@ -154,6 +170,8 @@ public final class PublishingPanel extends JPanel implements Workspace {
           else loadVersion(v.path("id").asText());
         });
     JTabbedPane tabs = new JTabbedPane();
+    tabs.putClientProperty("JTabbedPane.tabType", "card");
+    tabs.setFont(Theme.brand(13));
     JPanel catalog = new JPanel(new GridLayout(1, 2, 12, 0));
     catalog.setOpaque(false);
     catalog.add(

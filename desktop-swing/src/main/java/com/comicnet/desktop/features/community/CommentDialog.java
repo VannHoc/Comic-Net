@@ -8,6 +8,7 @@ import java.awt.event.*;
 import java.math.BigDecimal;
 import java.util.*;
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 
 public final class CommentDialog extends JDialog {
   private final ApiClient api;
@@ -94,12 +95,25 @@ public final class CommentDialog extends JDialog {
     commentTab.add(comments);
     JPanel lower = new JPanel(new BorderLayout());
     lower.add(new JScrollPane(content));
-    JPanel buttons = row();
+    JPanel buttons = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 4));
+    buttons.setOpaque(true);
+    buttons.setBackground(Theme.SURFACE);
+    buttons.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(Theme.BORDER, 1),
+        new EmptyBorder(8, 12, 8, 12)));
     buttons.add(reveal);
-    buttons.add(button("Viết", () -> edit(false, false)));
+    PrimaryButton writeBtn = new PrimaryButton("Viết bình luận");
+    writeBtn.setIcon(UiIcons.plus(13, Color.WHITE));
+    writeBtn.addActionListener(e -> edit(false, false));
+    buttons.add(writeBtn);
     buttons.add(button("Trả lời", () -> edit(true, false)));
-    buttons.add(button("Sửa", () -> edit(false, true)));
-    buttons.add(button("Xóa", this::delete));
+    JButton editBtn = button("Sửa", () -> edit(false, true));
+    editBtn.setIcon(UiIcons.edit(13, Theme.MUTED));
+    buttons.add(editBtn);
+    JButton delBtn = button("Xóa", this::delete);
+    delBtn.setIcon(UiIcons.trash(13, Theme.DANGER));
+    delBtn.setForeground(Theme.DANGER);
+    buttons.add(delBtn);
     buttons.add(button("+1", () -> vote(1)));
     buttons.add(button("−1", () -> vote(-1)));
     buttons.add(button("Bỏ vote", () -> vote(null)));
@@ -107,7 +121,9 @@ public final class CommentDialog extends JDialog {
     buttons.add(button("Chặn người viết", this::block));
     lower.add(buttons, BorderLayout.SOUTH);
     commentTab.add(lower, BorderLayout.SOUTH);
-    tabs.addTab("Bình luận", commentTab);
+    tabs.putClientProperty("JTabbedPane.tabType", "card");
+    tabs.setFont(Theme.brand(13));
+    tabs.addTab("Bình luận", UiIcons.edit(14, Theme.MUTED), commentTab);
     if (api.signedIn()) {
       JPanel blocked = new JPanel(new BorderLayout());
       blocked.add(blocks);

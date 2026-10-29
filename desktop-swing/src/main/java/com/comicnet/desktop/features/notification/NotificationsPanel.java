@@ -24,19 +24,44 @@ public final class NotificationsPanel extends JPanel implements Workspace {
   private final JCheckBox inApp = new JCheckBox("Trong ứng dụng", true),
       email = new JCheckBox("Email");
   private final UiTasks actions = new UiTasks(), preferences = new UiTasks();
+  private JsonNode preferencesByType;
 
   public NotificationsPanel(ApiClient api) {
-    super(new BorderLayout(0, 14));
+    super(new BorderLayout(0, 16));
     this.api = api;
     setOpaque(false);
-    setBorder(new EmptyBorder(26, 30, 20, 30));
+    setBorder(new EmptyBorder(Theme.CONTENT_PADDING, Theme.CONTENT_PADDING, 24, Theme.CONTENT_PADDING));
+
+    // Header Section V1.0
+    JPanel header = new JPanel(new BorderLayout(0, 4));
+    header.setOpaque(false);
+    JLabel eyebrow = Theme.plainLabel("TRUNG TÂM TIN TỨC & THÔNG BÁO");
+    eyebrow.setForeground(Theme.PRIMARY);
+    eyebrow.setFont(Theme.heading(11));
     JLabel heading = new JLabel("Thông báo");
     heading.setFont(Theme.heading(28));
-    JPanel top = new JPanel(new BorderLayout());
-    top.setOpaque(false);
-    top.add(heading, BorderLayout.WEST);
-    top.add(summary, BorderLayout.EAST);
-    add(top, BorderLayout.NORTH);
+    heading.setForeground(Theme.TEXT);
+    JLabel sub =
+        Theme.plainLabel("Cập nhật chương mới, phản hồi cộng đồng và thông báo hệ thống.");
+    sub.setFont(Theme.label(13));
+    sub.setForeground(Theme.MUTED);
+
+    JPanel titleBox = new JPanel(new GridLayout(0, 1, 0, 2));
+    titleBox.setOpaque(false);
+    titleBox.add(eyebrow);
+    titleBox.add(heading);
+    titleBox.add(sub);
+    header.add(titleBox, BorderLayout.WEST);
+
+    // Summary badge on top right
+    summary.setFont(Theme.brand(12));
+    summary.setForeground(Theme.PRIMARY);
+    summary.setBackground(Theme.ACTION_TINT);
+    summary.setOpaque(true);
+    summary.setBorder(new EmptyBorder(6, 12, 6, 12));
+    header.add(summary, BorderLayout.EAST);
+    add(header, BorderLayout.NORTH);
+
     table =
         new RemoteTable(
             api,
@@ -54,37 +79,109 @@ public final class NotificationsPanel extends JPanel implements Workspace {
                   v.path("read").asBoolean() ? "Đã đọc" : "Chưa đọc"
                 });
     table.onLoaded(this::refreshSummary);
+
     JPanel inbox = new JPanel(new BorderLayout(0, 10));
     inbox.setOpaque(false);
-    inbox.add(table);
-    inbox.add(
-        row(
-            unreadOnly,
-            button("Làm mới", this::reload),
-            button("Đánh dấu đã đọc", () -> mark(true)),
-            button("Đánh dấu chưa đọc", () -> mark(false)),
-            button("Đọc tất cả", this::readAll)),
-        BorderLayout.SOUTH);
-    JPanel preferenceView = new JPanel(new GridLayout(0, 1, 0, 10));
-    preferenceView.setOpaque(false);
-    preferenceView.setBorder(new EmptyBorder(18, 18, 18, 18));
-    preferenceView.add(
-        new JLabel("Bật/tắt thông báo trong ứng dụng và email theo từng loại sự kiện."));
-    preferenceView.add(type);
-    preferenceView.add(inApp);
-    preferenceView.add(email);
-    preferenceView.add(row(button("Lưu thiết lập", this::savePreference)));
-    preferenceView.add(new JLabel("Email chỉ gửi khi tài khoản đã xác minh và bật thông báo."));
+    inbox.add(table, BorderLayout.CENTER);
+
+    // Inbox Bottom Toolbar Card
+    JPanel actionCard = new JPanel(new BorderLayout());
+    actionCard.setOpaque(true);
+    actionCard.setBackground(Theme.SURFACE);
+    actionCard.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Theme.BORDER, 1),
+            new EmptyBorder(10, 14, 10, 14)));
+
+    unreadOnly.setFont(Theme.label(13));
+    unreadOnly.addActionListener(e -> reload());
+
+    JButton refresh = button("Làm mới", UiIcons.refresh(14, Theme.TEXT), this::reload);
+    JButton markRead = button("Đánh dấu đã đọc", UiIcons.check(14, Theme.SUCCESS), () -> mark(true));
+    JButton markUnread = button("Đánh dấu chưa đọc", () -> mark(false));
+    PrimaryButton readAll = new PrimaryButton("Đọc tất cả");
+    readAll.setIcon(UiIcons.check(14, Color.WHITE));
+    readAll.addActionListener(e -> readAll());
+
+    JPanel leftActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+    leftActions.setOpaque(false);
+    leftActions.add(unreadOnly);
+    leftActions.add(refresh);
+    leftActions.add(markRead);
+    leftActions.add(markUnread);
+    leftActions.add(readAll);
+
+    actionCard.add(leftActions, BorderLayout.WEST);
+    inbox.add(actionCard, BorderLayout.SOUTH);
+
+    // Preferences View Card
+    JPanel preferenceCard = new JPanel(new BorderLayout());
+    preferenceCard.setOpaque(true);
+    preferenceCard.setBackground(Theme.SURFACE);
+    preferenceCard.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Theme.BORDER, 1),
+            new EmptyBorder(24, 28, 24, 28)));
+
+    JPanel prefForm = new JPanel(new GridLayout(0, 1, 0, 14));
+    prefForm.setOpaque(false);
+    prefForm.setMaximumSize(new Dimension(500, 300));
+
+    JLabel prefDesc =
+        new JLabel("Bật/tắt thông báo trong ứng dụng và email theo từng loại sự kiện.");
+    prefDesc.setFont(Theme.heading(14));
+    prefDesc.setForeground(Theme.TEXT);
+
+    JLabel typeLabel = Theme.plainLabel("Loại sự kiện:");
+    typeLabel.setFont(Theme.heading(12));
+    typeLabel.setForeground(Theme.MUTED);
+
+    inApp.setFont(Theme.label(13));
+    email.setFont(Theme.label(13));
+
+    PrimaryButton savePref = new PrimaryButton("Lưu thiết lập");
+    savePref.setIcon(UiIcons.check(14, Color.WHITE));
+    savePref.addActionListener(e -> savePreference());
+
+    JLabel note =
+        Theme.plainLabel("Email chỉ gửi khi tài khoản đã xác minh email và bật nhận thông báo.");
+    note.setFont(Theme.label(12));
+    note.setForeground(Theme.MUTED);
+
+    prefForm.add(prefDesc);
+    prefForm.add(typeLabel);
+    prefForm.add(type);
+    prefForm.add(inApp);
+    prefForm.add(email);
+    prefForm.add(row(savePref));
+    prefForm.add(note);
+
+    JPanel prefWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+    prefWrapper.setOpaque(false);
+    prefWrapper.add(prefForm);
+    preferenceCard.add(prefWrapper, BorderLayout.CENTER);
+
+    // JTabbedPane
     JTabbedPane tabs = new JTabbedPane();
-    tabs.addTab("Hộp thông báo", inbox);
-    tabs.addTab("Thiết lập", preferenceView);
+    tabs.putClientProperty("JTabbedPane.tabType", "card");
+    tabs.setFont(Theme.brand(13));
+    tabs.addTab("Hộp thông báo", UiIcons.bell(15, Theme.MUTED), inbox);
+    tabs.addTab("Thiết lập", UiIcons.settings(15, Theme.MUTED), preferenceCard);
     tabs.addChangeListener(
         e -> {
           if (tabs.getSelectedIndex() == 1) loadPreferences();
         });
     type.addActionListener(e -> showSelectedPreference());
-    add(tabs);
-    add(message, BorderLayout.SOUTH);
+
+    add(tabs, BorderLayout.CENTER);
+
+    // Footer Info
+    JPanel footer = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+    footer.setOpaque(false);
+    message.setFont(Theme.label(12));
+    message.setForeground(Theme.MUTED);
+    footer.add(message);
+    add(footer, BorderLayout.SOUTH);
   }
 
   private JPanel row(Component... components) {
@@ -96,6 +193,8 @@ public final class NotificationsPanel extends JPanel implements Workspace {
 
   private JButton button(String text, Runnable action) {
     JButton button = new JButton(text);
+    button.setFont(Theme.label(13));
+    button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     button.addActionListener(
         e -> {
           if (!api.signedIn()) {
@@ -105,6 +204,12 @@ public final class NotificationsPanel extends JPanel implements Workspace {
           if (!actions.busy()) action.run();
         });
     return button;
+  }
+
+  private JButton button(String text, Icon icon, Runnable action) {
+    JButton btn = button(text, action);
+    btn.setIcon(icon);
+    return btn;
   }
 
   private String label(String code) {
@@ -131,7 +236,7 @@ public final class NotificationsPanel extends JPanel implements Workspace {
                       summary.setText(
                           "Chưa đọc: "
                               + reply.body().path("unread").asLong()
-                              + " · Tổng: "
+                              + "  ·  Tổng: "
                               + reply.body().path("total").asLong());
                     }));
   }
@@ -177,8 +282,6 @@ public final class NotificationsPanel extends JPanel implements Workspace {
           showSelectedPreference();
         });
   }
-
-  private JsonNode preferencesByType;
 
   private void showSelectedPreference() {
     if (preferencesByType == null) return;

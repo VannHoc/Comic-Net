@@ -27,8 +27,8 @@ public final class PrimaryButton extends JButton {
           !isEnabled()
               ? new Color(0xDDDDE7)
               : getModel().isPressed()
-                  ? Theme.ACTION.darker()
-              : getModel().isRollover() ? Theme.ACTION.brighter() : Theme.ACTION;
+                  ? Theme.ACTION_HOVER.darker()
+              : getModel().isRollover() ? Theme.ACTION_HOVER : Theme.ACTION;
       canvas.setColor(fill);
       canvas.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, 20, 20);
       if (hasFocus()) {

@@ -373,6 +373,61 @@ class ReaderFlowIT {
   }
 
   @Test
+  void purchaseRevocationAndRefundCreditsCoinsBackAndAllowsRepurchase() throws Exception {
+    var c = context();
+    var price = purchases.setPrice(c.creator(), c.chapter(), "REWARD", 25);
+    publishing.patchChapter(c.creator(), c.chapter(),
+        json.readTree("{\"accessPolicy\":\"RESTRICTED\"}"),
+        Etags.of(publishing.chapterToken(c.chapter())));
+    wallet.apply(c.reader().userId(), "REWARD", 40, "CHECK_IN", key());
+    var unlockResult = purchases.unlock(c.reader(), c.chapter(), price.id(), key());
+    assertThat(unlockResult.status()).isEqualTo("COMPLETED");
+    assertThat(wallet.balance(c.reader().userId()).rewardCoin()).isEqualTo(15);
+    assertThat(reader.access(c.reader(), c.chapter()).allowed()).isTrue();
+
+    // 1. Admin refunds and revokes the purchase
+    var refund = purchases.refund(c.admin(), unlockResult.purchaseId(), "Khách khiếu nại nhầm lẫn");
+    assertThat(refund.amount()).isEqualTo(25);
+    assertThat(refund.balance().rewardCoin()).isEqualTo(40);
+    assertThat(wallet.balance(c.reader().userId()).rewardCoin()).isEqualTo(40);
+
+    // 2. Access is now REVOKED
+    assertThat(reader.access(c.reader(), c.chapter()).allowed()).isFalse();
+    assertThat(entitlements.history(c.reader().userId(), 0, 20).items()).singleElement()
+        .satisfies(item -> {
+          assertThat(item.kind()).isEqualTo("PURCHASE");
+          assertThat(item.state()).isEqualTo("REVOKED");
+          assertThat(item.validTo()).isNotNull();
+        });
+
+    // 3. Duplicate refund must fail with 409 Conflict
+    assertThatThrownBy(() -> purchases.refund(c.admin(), unlockResult.purchaseId(), "Thử hoàn lần 2"))
+        .isInstanceOfSatisfying(DomainException.class, e -> assertThat(e.status()).isEqualTo(409));
+
+    // 4. Non-admin cannot refund
+    assertThatThrownBy(() -> purchases.refund(c.reader(), unlockResult.purchaseId(), "Reader tự hoàn"))
+        .isInstanceOfSatisfying(DomainException.class, e -> assertThat(e.status()).isEqualTo(403));
+
+    // 5. User can re-purchase the chapter cleanly
+    var repurchase = purchases.unlock(c.reader(), c.chapter(), price.id(), key());
+    assertThat(repurchase.status()).isEqualTo("COMPLETED");
+    assertThat(wallet.balance(c.reader().userId()).rewardCoin()).isEqualTo(15);
+    assertThat(reader.access(c.reader(), c.chapter()).allowed()).isTrue();
+
+    // 6. Admin can list purchases and see both old refunded and new completed
+    var list = purchases.listPurchases(c.admin(), 0, 20, null, null);
+    assertThat(list.items()).hasSizeGreaterThanOrEqualTo(2);
+
+    // 7. Admin controller HTTP test
+    String adminBearer = auth.login(
+        new AuthRequests.Login(auth.user(c.admin().userId()).email(), "Test-password-42!", "JUnit Admin"))
+        .accessToken();
+    mvc.perform(get("/api/v1/admin/purchases")
+        .header("Authorization", "Bearer " + adminBearer))
+        .andExpect(status().isOk());
+  }
+
+  @Test
   @org.springframework.test.annotation.Commit
   @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(
       named = "COMICNET_CREATE_GUI_FIXTURE", matches = "true")
@@ -393,6 +448,53 @@ class ReaderFlowIT {
         "readerId=" + c.reader().userId() + "\n"
             + "readerEmail=" + auth.user(c.reader().userId()).email() + "\n"
             + "comicId=" + c.comic() + "\nchapterId=" + c.chapter() + "\n");
+  }
+
+  @Test
+  @org.springframework.test.annotation.Commit
+  @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(
+      named = "COMICNET_CREATE_READER_GUI_FIXTURE", matches = "true")
+  void prepareMultiChapterReaderGuiFixture() throws Exception {
+    var first = context();
+    var secondComic = context();
+    long translation = jdbc.queryForObject("SELECT TranslationId FROM dbo.Chapter WHERE Id=?",
+        Long.class, first.chapter());
+    long chapter = Ids.parse(publishing.createChapter(first.creator(), translation,
+        new ChapterInput(null, "2", "Chương hai - kiểm thử nhiều trang", "2", "FREE"), key()).id());
+    long version = Ids.parse(publishing.createVersion(first.creator(), chapter,
+        new VersionCreate(null), key()).id());
+    for (int i = 0; i < 3; i++) {
+      BufferedImage image = new BufferedImage(240, 360, BufferedImage.TYPE_INT_RGB);
+      var graphics = image.createGraphics();
+      graphics.setColor(new java.awt.Color(45 + i * 65, 95 + i * 35, 165 - i * 35));
+      graphics.fillRect(0, 0, 240, 360);
+      graphics.setColor(java.awt.Color.WHITE);
+      graphics.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 64));
+      graphics.drawString("" + (i + 1), 95, 200);
+      graphics.dispose();
+      var bytes = new ByteArrayOutputStream();
+      ImageIO.write(image, "PNG", bytes);
+      var job = uploads.accept(first.creator(), version,
+          new MockMultipartFile("file", "qa-page-" + (i + 1) + ".png", "image/png", bytes.toByteArray()),
+          null, Etags.of(publishing.versionToken(version)), key());
+      jobs.add(Ids.parse(job.id()));
+      worker.processJob(Ids.parse(job.id()));
+    }
+    publishing.submit(first.creator(), version, Etags.of(publishing.versionToken(version)));
+    publishing.review(first.admin(), version, new Review("APPROVE", null),
+        Etags.of(publishing.versionToken(version)));
+    publishing.publish(first.creator(), chapter, new Publish(version + ""),
+        Etags.of(publishing.chapterToken(chapter)));
+    jdbc.update("UPDATE dbo.[User] SET Status='SUSPENDED' WHERE Id IN (?,?,?,?)",
+        first.admin().userId(), first.creator().userId(),
+        secondComic.admin().userId(), secondComic.creator().userId());
+    var file = java.nio.file.Path.of("../.local/qa/reader-ui/multi-fixture.txt");
+    java.nio.file.Files.createDirectories(file.getParent());
+    java.nio.file.Files.writeString(file,
+        "readerId=" + first.reader().userId() + "\n"
+            + "readerEmail=" + auth.user(first.reader().userId()).email() + "\n"
+            + "comicOne=" + first.comic() + "\nchapterOne=" + first.chapter() + "\n"
+            + "chapterTwo=" + chapter + "\ncomicTwo=" + secondComic.comic() + "\n");
   }
 
   @Test

@@ -51,6 +51,19 @@ class ReaderPanelTest {
     }
   }
 
+  @Test
+  void revokedAccessClearsOpenChapter() throws Exception {
+    try (var fixture = new Fixture(false, new CompletableFuture<>())) {
+      fixture.open();
+      assertTrue(fixture.loaded.await(5, TimeUnit.SECONDS));
+      fixture.accessAllowed.set(false);
+      SwingUtilities.invokeAndWait(fixture.panel::checkAccess);
+      long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+      while (fixture.hasManifest() && System.nanoTime() < deadline) Thread.sleep(20);
+      assertFalse(fixture.hasManifest(), "Revoked access must discard the loaded manifest.");
+    }
+  }
+
   private final class Fixture implements AutoCloseable {
     final HttpServer server;
     final ClientSession session = new ClientSession();
@@ -58,6 +71,7 @@ class ReaderPanelTest {
     final MediaTransport media = new MediaTransport(Set.of("127.0.0.1"));
     final ReaderPanel panel;
     final CountDownLatch loaded = new CountDownLatch(1);
+    final AtomicBoolean accessAllowed = new AtomicBoolean(true);
 
     Fixture(boolean unavailable, CompletableFuture<JsonNode> saved) throws Exception {
       server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -77,7 +91,9 @@ class ReaderPanelTest {
               exchange.close();
               return;
             }
-            if (path.endsWith("/manifest"))
+            if (path.endsWith("/access"))
+              response = "{\"allowed\":" + accessAllowed.get() + "}";
+            else if (path.endsWith("/manifest"))
               response =
                   "{\"chapterId\":\"1\",\"versionId\":\"2\",\"pages\":[{\"pageId\":\"10\",\"position\":1,\"width\":8,\"height\":12,\"mimeType\":\"image/png\",\"url\":\""
                       + base
@@ -130,6 +146,17 @@ class ReaderPanelTest {
             panel.open(ReaderLocation.chapter("1"));
           });
       SwingUtilities.invokeLater(() -> layout(panel));
+    }
+
+    boolean hasManifest() throws Exception {
+      var field = ReaderPanel.class.getDeclaredField("manifest");
+      field.setAccessible(true);
+      var result = new AtomicBoolean();
+      SwingUtilities.invokeAndWait(() -> {
+        try { result.set(field.get(panel) != null); }
+        catch (IllegalAccessException e) { throw new AssertionError(e); }
+      });
+      return result.get();
     }
 
     private void layout(Container parent) {

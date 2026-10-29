@@ -22,7 +22,7 @@ public final class RemoteTable extends JPanel implements AutoCloseable {
   private Consumer<JsonNode> selection = value -> {};
   private Consumer<JsonNode> loaded = value -> {};
   private int page;
-  private final JButton previous = new JButton("Trước"), next = new JButton("Sau");
+  private final JButton previous = new JButton("← Trước"), next = new JButton("Sau →");
 
   public RemoteTable(
       ApiClient api,
@@ -42,13 +42,30 @@ public final class RemoteTable extends JPanel implements AutoCloseable {
           }
         };
     table = new JTable(model);
-    table.setRowHeight(36);
+    table.setRowHeight(38);
+    table.setFont(Theme.label(13));
+    table.setShowHorizontalLines(true);
+    table.setShowVerticalLines(false);
+    table.setGridColor(Theme.BORDER);
+    table.setSelectionBackground(Theme.ACTION_TINT);
+    table.setSelectionForeground(Theme.TEXT);
+    if (table.getTableHeader() != null) {
+      table.getTableHeader().setFont(Theme.brand(12));
+      table.getTableHeader().setBackground(Theme.ELEVATED);
+      table.getTableHeader().setForeground(Theme.MUTED);
+      table.getTableHeader().setPreferredSize(new Dimension(0, 36));
+      table.getTableHeader().setReorderingAllowed(false);
+    }
     table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     Theme.plainTable(table);
-    add(new JScrollPane(table));
+    JScrollPane scroll = new JScrollPane(table);
+    scroll.setBorder(BorderFactory.createLineBorder(Theme.BORDER, 1));
+    scroll.getViewport().setBackground(Theme.SURFACE);
+    add(scroll, BorderLayout.CENTER);
     JPanel footer = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 4));
     footer.setOpaque(false);
-    JButton refresh = new JButton("Tải lại");
+    JButton refresh = new JButton(" Tải lại");
+    refresh.setIcon(UiIcons.refresh(12, Theme.MUTED));
     footer.add(previous);
     footer.add(next);
     footer.add(refresh);

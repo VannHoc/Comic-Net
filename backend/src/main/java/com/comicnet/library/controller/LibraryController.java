@@ -129,6 +129,44 @@ public class LibraryController {
     return ResponseEntity.noContent().build();
   }
 
+  @GetMapping("/favorites")
+  public PageResult<ComicSummary> favorites(
+      @AuthenticationPrincipal Identity actor,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size) {
+    return library.favorites(actor, page, size);
+  }
+
+  @GetMapping("/favorites/{comic}")
+  public ResponseEntity<java.util.Map<String, Boolean>> isFavorite(
+      @AuthenticationPrincipal Identity actor, @PathVariable long comic) {
+    boolean fav = library.isFavorite(actor, comic);
+    return ResponseEntity.ok(java.util.Map.of("isFavorite", fav));
+  }
+
+  @PostMapping("/favorites/{comic}")
+  public ResponseEntity<java.util.Map<String, Boolean>> toggleFavoritePost(
+      @AuthenticationPrincipal Identity actor, @PathVariable long comic) {
+    boolean fav = library.toggleFavorite(actor, comic);
+    return ResponseEntity.ok(java.util.Map.of("isFavorite", fav));
+  }
+
+  @PutMapping("/favorites/{comic}")
+  public ResponseEntity<java.util.Map<String, Boolean>> toggleFavoritePut(
+      @AuthenticationPrincipal Identity actor, @PathVariable long comic) {
+    boolean fav = library.toggleFavorite(actor, comic);
+    return ResponseEntity.ok(java.util.Map.of("isFavorite", fav));
+  }
+
+  @DeleteMapping("/favorites/{comic}")
+  public ResponseEntity<java.util.Map<String, Boolean>> removeFavorite(
+      @AuthenticationPrincipal Identity actor, @PathVariable long comic) {
+    if (library.isFavorite(actor, comic)) {
+      library.toggleFavorite(actor, comic);
+    }
+    return ResponseEntity.ok(java.util.Map.of("isFavorite", false));
+  }
+
   @GetMapping("/bookmarks")
   public PageResult<Bookmark> bookmarks(
       @AuthenticationPrincipal Identity actor,

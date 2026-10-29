@@ -1,4 +1,4 @@
-# Feature register — 23 module
+﻿# Feature register — 23 module
 
 Revision3 Swing-first, ngày2026-10-27. Mỗi bullet dưới `### Chức năng` trong prj_app.md được giữ nguyên, gán ID và phase đề xuất. Business rules và conditional qualifiers của đặc tả vẫn có hiệu lực. Source line là dòng one-based. Mỗi feature thuộc epic Mxx; feature MVP ánh xạ user story tương ứng trong mvp-backlog.md. Trạng thái đã được đối chiếu checkpoint P1/P2; Implemented (phần MVP) chỉ ghi phần code hiện có, không khẳng định feature nâng cao hoặc AC native đã Verified. Phần foundation P1 đã được user nghiệm thu; phase sau vẫn Not Started.
 
@@ -228,13 +228,13 @@ Revision3 Swing-first, ngày2026-10-27. Mỗi bullet dưới `### Chức năng` 
 
 | ID | Chức năng nguyên văn | Phase | Trạng thái | Dòng nguồn |
 |---|---|---|---|---|
-| M16-F01 | EXP System. | 5 | Not Started | 791 |
-| M16-F02 | User Level. | 5 | Not Started | 792 |
+| M16-F01 | EXP System. | 5 | Implemented & Verified (GamificationFlowIT, live UI test) | 791 |
+| M16-F02 | User Level. | 5 | Implemented & Verified (Level 1..10+, EXP bar) | 792 |
 | M16-F03 | Achievement System. | 5 | Not Started | 793 |
-| M16-F04 | Daily Check-In. | 5 | Not Started | 794 |
-| M16-F05 | Reading Rewards. | 5 | Not Started | 795 |
+| M16-F04 | Daily Check-In. | 5 | Implemented & Verified (Streak 7 ngày, chống điểm danh trùng) | 794 |
+| M16-F05 | Reading Rewards. | 5 | Implemented & Verified (+20 EXP mỗi chương, chống cày lặp) | 795 |
 | M16-F06 | Comment / Review Rewards. | 5 | Not Started | 796 |
-| M16-F07 | Cultivation Titles. | 5 | Not Started | 797 |
+| M16-F07 | Cultivation Titles. | 5 | Implemented & Verified (Danh hiệu theo level độc giả) | 797 |
 | M16-F08 | Avatar Frames. | 5 | Not Started | 798 |
 | M16-F09 | Special Badges. | 5 | Not Started | 799 |
 | M16-F10 | Unlockable Perks. | 5 | Not Started | 800 |
@@ -242,16 +242,16 @@ Revision3 Swing-first, ngày2026-10-27. Mỗi bullet dưới `### Chức năng` 
 
 | ID | Chức năng nguyên văn | Phase | Trạng thái | Dòng nguồn |
 |---|---|---|---|---|
-| M17-F01 | Daily Lucky Wheel. | 5 | Not Started | 824 |
-| M17-F02 | Reward Coin Spending. | 5 | Not Started | 825 |
-| M17-F03 | Free Daily Spin. | 5 | Not Started | 826 |
+| M17-F01 | Daily Lucky Wheel. | 5 | Implemented & Verified (Vòng quay 8 ô canvas animation) | 824 |
+| M17-F02 | Reward Coin Spending. | 5 | Implemented & Verified (5 Reward Coin lượt quay phụ) | 825 |
+| M17-F03 | Free Daily Spin. | 5 | Implemented & Verified (1 lượt quay miễn phí/ngày) | 826 |
 | M17-F04 | Character Card Collection. | 5 | Not Started | 827 |
 | M17-F05 | Gacha Collection. | 5 | Not Started | 828 |
 | M17-F06 | Manga Trivia. | 5 | Not Started | 829 |
 | M17-F07 | Quiz Rewards. | 5 | Not Started | 830 |
 | M17-F08 | Voucher & Perk Redemption. | 5 | Not Started | 831 |
 | M17-F09 | Reward Inventory. | 5 | Not Started | 832 |
-| M17-F10 | Mini-Game History. | 5 | Not Started | 833 |
+| M17-F10 | Mini-Game History. | 5 | Implemented & Verified (Lịch sử điểm danh & quay thưởng & thưởng đọc) | 833 |
 ## M18 — AI AUTOMATION & CONTENT INTELLIGENCE
 
 | ID | Chức năng nguyên văn | Phase | Trạng thái | Dòng nguồn |
@@ -291,8 +291,8 @@ Revision3 Swing-first, ngày2026-10-27. Mỗi bullet dưới `### Chức năng` 
 | M20-F06 | Reward-Based Unlock. | 4 | Implemented; SQL/RustFS và Swing GUI end-to-end Verified 2026-10-29 (mua, đọc, đăng nhập lại, quyền lưu SQL) | 913 |
 | M20-F07 | Access Validation. | 2 FREE/RESTRICTED; 4 thương mại | Implemented FREE/entitlement; SQL Tested; Swing chưa Verified | 914 |
 | M20-F08 | Entitlement History. | 4 | Implemented API/Swing; SQL Tested và GUI xác nhận bản ghi PURCHASE/ACTIVE sau đăng nhập lại 2026-10-29 | 915 |
-| M20-F09 | Access Expiration / Revocation. | 4 | Not Started | 916 |
-| M20-F10 | Cross-Device Access Synchronization. | 4; 6 realtime | Not Started | 917 |
+| M20-F09 | Access Expiration / Revocation. | 4 | Implemented API/Swing; SQL Tested & Verified (Flyway V27, double-entry ledger refund, repurchase enabled, Admin API & UI) 2026-10-29 | 916 |
+| M20-F10 | Cross-Device Access Synchronization. | 4; 6 realtime | In Progress: Swing kiểm tra lại quyền đọc mỗi 30 giây khi chương đang mở và xóa nội dung khi quyền bị thu hồi; test Swing PASS. Chưa có đồng bộ cấp quyền tức thời hoặc QA hai thiết bị. | 917 |
 ## M21 — SYSTEM OBSERVABILITY & RELIABILITY
 
 | ID | Chức năng nguyên văn | Phase | Trạng thái | Dòng nguồn |

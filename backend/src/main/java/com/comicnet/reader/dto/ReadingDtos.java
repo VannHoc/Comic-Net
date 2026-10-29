@@ -45,5 +45,5 @@ public final class ReadingDtos {
   public record Preference(
       @NotBlank @Pattern(regexp = "SCROLL|PAGED") String mode,
       @NotBlank @Pattern(regexp = "LTR|RTL") String direction,
-      @NotBlank @Pattern(regexp = "WIDTH|HEIGHT") String fit) {}
+      @NotBlank @Pattern(regexp = "WIDTH|HEIGHT|ORIGINAL") String fit) {}
 }

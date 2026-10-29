@@ -160,42 +160,149 @@
     },
     "/auth/verify-email-otp": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "operationId": "verifyEmailOtp",
         "summary": "Verify email with six digit code",
         "security": [],
         "requestBody": {
           "required": true,
-          "content": {"application/json": {"schema": {"type": "object", "required": ["email", "code"], "properties": {"email": {"type": "string", "format": "email"}, "code": {"type": "string", "pattern": "^[0-9]{6}$"}}}}}
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "code"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[0-9]{6}$"
+                  }
+                }
+              }
+            }
+          }
         },
-        "responses": {"204": {"description": "Email verified"}, "400": {"description": "Invalid or expired code"}}
+        "responses": {
+          "204": {
+            "description": "Email verified"
+          },
+          "400": {
+            "description": "Invalid or expired code"
+          }
+        }
       }
     },
     "/auth/reset-password-otp": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "operationId": "resetPasswordOtp",
         "summary": "Reset password with six digit code",
         "security": [],
         "requestBody": {
           "required": true,
-          "content": {"application/json": {"schema": {"type": "object", "required": ["email", "code", "password"], "properties": {"email": {"type": "string", "format": "email"}, "code": {"type": "string", "pattern": "^[0-9]{6}$"}, "password": {"type": "string"}}}}}
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "code",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[0-9]{6}$"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
         },
-        "responses": {"204": {"description": "Password reset"}, "400": {"description": "Invalid or expired code"}}
+        "responses": {
+          "204": {
+            "description": "Password reset"
+          },
+          "400": {
+            "description": "Invalid or expired code"
+          }
+        }
       }
     },
     "/me/username": {
       "patch": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "operationId": "updateMyUsername",
         "summary": "Update own username",
-        "security": [{"BearerAuth": []}],
-        "parameters": [{"$ref": "#/components/parameters/IfMatch"}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
         "requestBody": {
           "required": true,
-          "content": {"application/json": {"schema": {"type": "object", "required": ["username"], "properties": {"username": {"type": "string", "pattern": "^[A-Za-z0-9_]{3,12}$"}}}}}
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_]{3,12}$"
+                  }
+                }
+              }
+            }
+          }
         },
-        "responses": {"200": {"description": "Updated user", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}}, "409": {"description": "Username already taken"}, "412": {"description": "Stale version"}, "428": {"description": "Missing version"}}
+        "responses": {
+          "200": {
+            "description": "Updated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Username already taken"
+          },
+          "412": {
+            "description": "Stale version"
+          },
+          "428": {
+            "description": "Missing version"
+          }
+        }
       }
     },
     "/auth/register": {
@@ -9267,6 +9374,123 @@
         }
       }
     },
+    "/me/favorites": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "listFavorites",
+        "summary": "listFavorites",
+        "description": "List favorites",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Size"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/me/favorites/{comicId}": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "getFavoriteStatus",
+        "summary": "getFavoriteStatus",
+        "description": "Get favorite status",
+        "parameters": [
+          {
+            "name": "comicId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "toggleFavoritePost",
+        "summary": "toggleFavoritePost",
+        "description": "Toggle favorite",
+        "parameters": [
+          {
+            "name": "comicId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "toggleFavoritePut",
+        "summary": "toggleFavoritePut",
+        "description": "Set favorite",
+        "parameters": [
+          {
+            "name": "comicId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "removeFavorite",
+        "summary": "removeFavorite",
+        "description": "Remove favorite",
+        "parameters": [
+          {
+            "name": "comicId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/me/follows": {
       "get": {
         "tags": [
@@ -14597,98 +14821,509 @@
       "get": {
         "operationId": "getMyWallet",
         "responses": {
-          "200": {"description": "Own paid and reward coin balances, no-store"},
-          "401": {"description": "Authentication required"}
+          "200": {
+            "description": "Own paid and reward coin balances, no-store"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
         },
-        "security": [{"BearerAuth": []}],
-        "tags": ["Wallet"]
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Wallet"
+        ]
       }
     },
     "/me/wallet/transactions": {
       "get": {
         "operationId": "getMyWalletTransactions",
         "parameters": [
-          {"in": "query", "name": "page", "schema": {"type": "integer", "default": 0}},
-          {"in": "query", "name": "size", "schema": {"type": "integer", "default": 20}}
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "Own paginated wallet ledger, no-store"},
-          "401": {"description": "Authentication required"}
+          "200": {
+            "description": "Own paginated wallet ledger, no-store"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
         },
-        "security": [{"BearerAuth": []}],
-        "tags": ["Wallet"]
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Wallet"
+        ]
       }
     },
     "/admin/wallets": {
-      "get": {"operationId": "listAdminWallets", "responses": {"200": {"description": "Paged accounts with paid, reward and total coin balances"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Wallet"]}
+      "get": {
+        "operationId": "listAdminWallets",
+        "responses": {
+          "200": {
+            "description": "Paged accounts with paid, reward and total coin balances"
+          },
+          "403": {
+            "description": "Administrator required"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Wallet"
+        ]
+      }
     },
     "/admin/wallets/{id}": {
-      "get": {"operationId": "getAdminWalletBalance", "responses": {"200": {"description": "Selected user's paid and reward balances"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Wallet"]}
+      "get": {
+        "operationId": "getAdminWalletBalance",
+        "responses": {
+          "200": {
+            "description": "Selected user's paid and reward balances"
+          },
+          "403": {
+            "description": "Administrator required"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Wallet"
+        ]
+      }
     },
     "/admin/wallets/{id}/transactions": {
-      "get": {"operationId": "getAdminWalletTransactions", "responses": {"200": {"description": "Selected user's wallet transactions"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Wallet"]}
+      "get": {
+        "operationId": "getAdminWalletTransactions",
+        "responses": {
+          "200": {
+            "description": "Selected user's wallet transactions"
+          },
+          "403": {
+            "description": "Administrator required"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Wallet"
+        ]
+      }
     },
     "/admin/wallets/{id}/adjustments": {
-      "get": {"operationId": "getAdminWalletAdjustments", "responses": {"200": {"description": "Audited wallet adjustments"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Wallet"]},
-      "post": {"operationId": "adjustAdminWallet", "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["tokenType", "amount", "direction", "reason"], "properties": {"tokenType": {"type": "string", "enum": ["PAID", "REWARD"]}, "amount": {"type": "integer", "format": "int64", "minimum": 1}, "direction": {"type": "string", "enum": ["GRANT", "REVOKE"]}, "reason": {"type": "string", "minLength": 1, "maxLength": 500}}}}}}, "responses": {"200": {"description": "Atomic wallet adjustment with audit"}, "403": {"description": "Administrator required"}, "409": {"description": "Insufficient coin or reused key"}}, "security": [{"BearerAuth": []}], "tags": ["Wallet"]}
+      "get": {
+        "operationId": "getAdminWalletAdjustments",
+        "responses": {
+          "200": {
+            "description": "Audited wallet adjustments"
+          },
+          "403": {
+            "description": "Administrator required"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Wallet"
+        ]
+      },
+      "post": {
+        "operationId": "adjustAdminWallet",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "tokenType",
+                  "amount",
+                  "direction",
+                  "reason"
+                ],
+                "properties": {
+                  "tokenType": {
+                    "type": "string",
+                    "enum": [
+                      "PAID",
+                      "REWARD"
+                    ]
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 1
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "GRANT",
+                      "REVOKE"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Atomic wallet adjustment with audit"
+          },
+          "403": {
+            "description": "Administrator required"
+          },
+          "409": {
+            "description": "Insufficient coin or reused key"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Wallet"
+        ]
+      }
     },
     "/chapters/{id}/prices": {
       "get": {
         "operationId": "getChapterPrices",
-        "responses": {"200": {"description": "Active PAID/REWARD offers for a published chapter"}},
-        "tags": ["Monetization"]
+        "responses": {
+          "200": {
+            "description": "Active PAID/REWARD offers for a published chapter"
+          }
+        },
+        "tags": [
+          "Monetization"
+        ]
       }
     },
     "/publishing/chapters/{id}/prices": {
       "put": {
         "operationId": "setChapterPrice",
-        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["currencyCode", "amount"]}}}},
-        "responses": {"200": {"description": "New active price snapshot"}, "403": {"description": "Creator scope required"}},
-        "tags": ["Monetization"]
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "currencyCode",
+                  "amount"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "New active price snapshot"
+          },
+          "403": {
+            "description": "Creator scope required"
+          }
+        },
+        "tags": [
+          "Monetization"
+        ]
       }
     },
     "/chapters/{id}/unlock": {
       "post": {
         "operationId": "unlockChapter",
-        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
-        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["priceId"]}}}},
-        "responses": {"200": {"description": "Atomic purchase, wallet debit and permanent chapter entitlement"}, "409": {"description": "Insufficient coin or stale price"}},
-        "tags": ["Monetization"]
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "priceId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Atomic purchase, wallet debit and permanent chapter entitlement"
+          },
+          "409": {
+            "description": "Insufficient coin or stale price"
+          }
+        },
+        "tags": [
+          "Monetization"
+        ]
       }
     },
     "/me/coin-packages": {
-      "get": {"operationId": "listLocalCoinPackages", "responses": {"200": {"description": "Local sandbox offers"}}, "tags": ["Finance"]}
+      "get": {
+        "operationId": "listLocalCoinPackages",
+        "responses": {
+          "200": {
+            "description": "Local sandbox offers"
+          }
+        },
+        "tags": [
+          "Finance"
+        ]
+      }
     },
     "/me/entitlements": {
-      "get": {"operationId": "listMyEntitlements", "responses": {"200": {"description": "Own paginated chapter entitlement history"}, "401": {"description": "Authentication required"}}, "security": [{"BearerAuth": []}], "tags": ["Entitlement"]}
+      "get": {
+        "operationId": "listMyEntitlements",
+        "responses": {
+          "200": {
+            "description": "Own paginated chapter entitlement history"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Entitlement"
+        ]
+      }
     },
     "/me/payment-orders": {
-      "get": {"operationId": "listMyLocalPaymentOrders", "responses": {"200": {"description": "Own paginated sandbox payment orders"}, "401": {"description": "Authentication required"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]},
-      "post": {"operationId": "createLocalPaymentOrder", "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}], "responses": {"200": {"description": "Pending local sandbox order"}}, "tags": ["Finance"]}
+      "get": {
+        "operationId": "listMyLocalPaymentOrders",
+        "responses": {
+          "200": {
+            "description": "Own paginated sandbox payment orders"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Finance"
+        ]
+      },
+      "post": {
+        "operationId": "createLocalPaymentOrder",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending local sandbox order"
+          }
+        },
+        "tags": [
+          "Finance"
+        ]
+      }
     },
     "/me/payment-orders/{id}": {
-      "get": {"operationId": "getLocalPaymentOrder", "responses": {"200": {"description": "Own order status"}}, "tags": ["Finance"]}
+      "get": {
+        "operationId": "getLocalPaymentOrder",
+        "responses": {
+          "200": {
+            "description": "Own order status"
+          }
+        },
+        "tags": [
+          "Finance"
+        ]
+      }
     },
     "/me/payment-orders/{id}/sandbox-settle": {
-      "post": {"operationId": "settleLocalPaymentOrder", "responses": {"200": {"description": "Local-only simulated provider settlement and Paid Coin credit"}}, "tags": ["Finance"]}
+      "post": {
+        "operationId": "settleLocalPaymentOrder",
+        "responses": {
+          "200": {
+            "description": "Local-only simulated provider settlement and Paid Coin credit"
+          }
+        },
+        "tags": [
+          "Finance"
+        ]
+      }
     },
     "/me/payment-orders/{id}/sandbox-fail": {
-      "post": {"operationId": "failLocalPaymentOrder", "responses": {"200": {"description": "Mark a pending sandbox order failed"}, "409": {"description": "Order is no longer pending"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]}
+      "post": {
+        "operationId": "failLocalPaymentOrder",
+        "responses": {
+          "200": {
+            "description": "Mark a pending sandbox order failed"
+          },
+          "409": {
+            "description": "Order is no longer pending"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Finance"
+        ]
+      }
     },
     "/admin/coin-packages": {
-      "get": {"operationId": "listAdminCoinPackages", "responses": {"200": {"description": "All local coin packages"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]}
+      "get": {
+        "operationId": "listAdminCoinPackages",
+        "responses": {
+          "200": {
+            "description": "All local coin packages"
+          },
+          "403": {
+            "description": "Administrator required"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Finance"
+        ]
+      }
     },
     "/admin/coin-packages/{code}": {
-      "put": {"operationId": "saveAdminCoinPackage", "responses": {"200": {"description": "Create or update package; existing orders retain snapshots"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]}
+      "put": {
+        "operationId": "saveAdminCoinPackage",
+        "responses": {
+          "200": {
+            "description": "Create or update package; existing orders retain snapshots"
+          },
+          "403": {
+            "description": "Administrator required"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Finance"
+        ]
+      }
     },
     "/admin/payment-orders": {
-      "get": {"operationId": "listAdminPaymentOrders", "responses": {"200": {"description": "Paged local payment orders"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]}
+      "get": {
+        "operationId": "listAdminPaymentOrders",
+        "responses": {
+          "200": {
+            "description": "Paged local payment orders"
+          },
+          "403": {
+            "description": "Administrator required"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Finance"
+        ]
+      }
     },
     "/admin/payment-orders/{id}/refund": {
-      "post": {"operationId": "refundAdminPaymentOrder", "responses": {"200": {"description": "Debit paid coins once and record refund reason"}, "403": {"description": "Administrator required"}, "409": {"description": "Insufficient coins or order not completed"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]}
+      "post": {
+        "operationId": "refundAdminPaymentOrder",
+        "responses": {
+          "200": {
+            "description": "Debit paid coins once and record refund reason"
+          },
+          "403": {
+            "description": "Administrator required"
+          },
+          "409": {
+            "description": "Insufficient coins or order not completed"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Finance"
+        ]
+      }
     },
     "/admin/payment-reconciliation": {
-      "post": {"operationId": "reconcileLocalPayments", "responses": {"200": {"description": "Persist sandbox order/ledger mismatch snapshot"}}, "tags": ["Finance"]}
+      "post": {
+        "operationId": "reconcileLocalPayments",
+        "responses": {
+          "200": {
+            "description": "Persist sandbox order/ledger mismatch snapshot"
+          }
+        },
+        "tags": [
+          "Finance"
+        ]
+      }
     },
     "/me/search-history": {
       "post": {
@@ -14929,6 +15564,188 @@
             "description": "Authentication required"
           }
         }
+      }
+    },
+    "/admin/purchases": {
+      "get": {
+        "operationId": "listAdminPurchases",
+        "responses": {
+          "200": {
+            "description": "Paged chapter purchases with chapter title, comic title and user"
+          },
+          "403": {
+            "description": "Administrator required"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Monetization"
+        ]
+      }
+    },
+    "/admin/purchases/{id}/refund": {
+      "post": {
+        "operationId": "refundAdminPurchase",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Atomic purchase refund and entitlement revocation"
+          },
+          "403": {
+            "description": "Administrator required"
+          },
+          "404": {
+            "description": "Purchase not found"
+          },
+          "409": {
+            "description": "Already refunded or invalid status"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Monetization"
+        ]
+      }
+    },
+    "/gamification/profile": {
+      "get": {
+        "operationId": "getGamificationProfile",
+        "responses": {
+          "200": {
+            "description": "User level, exp, streak and gamification status"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Gamification"
+        ]
+      }
+    },
+    "/gamification/check-in": {
+      "post": {
+        "operationId": "checkInDaily",
+        "responses": {
+          "200": {
+            "description": "Daily check-in completed with EXP and coin awards"
+          },
+          "409": {
+            "description": "Already checked in today"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Gamification"
+        ]
+      }
+    },
+    "/gamification/lucky-wheel": {
+      "get": {
+        "operationId": "getLuckyWheelInfo",
+        "responses": {
+          "200": {
+            "description": "Lucky wheel prizes and free spin availability"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Gamification"
+        ]
+      }
+    },
+    "/gamification/lucky-wheel/spin": {
+      "post": {
+        "operationId": "spinLuckyWheel",
+        "responses": {
+          "200": {
+            "description": "Lucky wheel spin result with awarded prize and updated balance"
+          },
+          "422": {
+            "description": "Insufficient reward coins for non-free spin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Gamification"
+        ]
+      }
+    },
+    "/gamification/reading-exp": {
+      "post": {
+        "operationId": "awardReadingExp",
+        "responses": {
+          "200": {
+            "description": "Award reading EXP for completing a chapter"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Gamification"
+        ]
+      }
+    },
+    "/gamification/history": {
+      "get": {
+        "operationId": "getGamificationHistory",
+        "responses": {
+          "200": {
+            "description": "Recent check-ins and lucky wheel spins"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "tags": [
+          "Gamification"
+        ]
       }
     }
   },
@@ -15298,7 +16115,8 @@
             "type": "string",
             "enum": [
               "WIDTH",
-              "HEIGHT"
+              "HEIGHT",
+              "ORIGINAL"
             ]
           }
         }

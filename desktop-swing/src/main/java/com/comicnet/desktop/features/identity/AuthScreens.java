@@ -54,7 +54,7 @@ final class AuthScreens extends JPanel {
     this.tasks = tasks;
     this.loggedIn = loggedIn;
     setBackground(Color.WHITE);
-    setPreferredSize(new Dimension(850, 570));
+    setPreferredSize(new Dimension(820, 480));
     left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
     left.setBackground(Color.WHITE);
     left.setBorder(new EmptyBorder(14, 26, 10, 26));
@@ -392,6 +392,7 @@ final class AuthScreens extends JPanel {
     tasks.run(this, status, api.login(address.getText().strip(), new String(password.getPassword())),
         reply -> {
           password.setText("");
+          artwork.setIcon(null);
           boolean saved = api.remember(remember.isSelected());
           loggedIn.run();
           if (!saved) JOptionPane.showMessageDialog(this,
@@ -423,7 +424,8 @@ final class AuthScreens extends JPanel {
     if (!recoveryPhone.isEmpty()) request.put("phone", recoveryPhone);
     tasks.run(this, status, api.request("POST", "/auth/register", request, null),
         reply -> {
-          password.setText(""); confirm.setText("");
+          password.setText("");
+          artwork.setIcon(null); confirm.setText("");
           if (recoveryEmail.isEmpty()) {
             show(Screen.SUCCESS);
             if (!recoveryPhone.isEmpty())

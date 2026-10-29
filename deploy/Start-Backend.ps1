@@ -112,7 +112,7 @@ try {
     }
     if ($Mode -eq 'Run' -and !$FromSource) {
         Write-Host 'Building the current backend source before starting the JAR.'
-        & .\mvnw.cmd -B -ntp -pl backend -am -DskipTests package
+        & .\mvnw.cmd -o -B -ntp -pl backend -am -DskipTests package
         if ($LASTEXITCODE -ne 0) { throw 'Backend build failed; an older JAR will not be started.' }
     }
     if ($Mode -ne 'Run') {

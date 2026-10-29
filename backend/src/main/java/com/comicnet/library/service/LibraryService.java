@@ -327,6 +327,66 @@ public class LibraryService implements ComicAudience {
     return PageResult.of(ids.stream().map(catalog::summary).toList(), page, size, count);
   }
 
+  @Transactional
+  public boolean toggleFavorite(Identity actor, long comic) {
+    self(actor);
+    ensureDefault(actor.userId());
+    long defaultColId = jdbc.queryForObject(
+        "SELECT Id FROM dbo.LibraryCollection WHERE UserId=? AND SystemKey='LIBRARY'",
+        Long.class, actor.userId());
+    catalog.summary(comic);
+    var current = jdbc.queryForList(
+        "SELECT IsFavorite FROM dbo.CollectionItem WITH (UPDLOCK,HOLDLOCK) WHERE CollectionId=? AND ComicId=?",
+        defaultColId, comic);
+    boolean newFav;
+    if (current.isEmpty()) {
+      newFav = true;
+      jdbc.update(
+          "INSERT dbo.CollectionItem(CollectionId,ComicId,ReadingStatus,IsFavorite) VALUES(?,?,'WANT_TO_READ',1)",
+          defaultColId, comic);
+    } else {
+      Boolean cur = (Boolean) current.getFirst().get("IsFavorite");
+      newFav = cur == null || !cur;
+      jdbc.update(
+          "UPDATE dbo.CollectionItem SET IsFavorite=? WHERE CollectionId=? AND ComicId=?",
+          newFav, defaultColId, comic);
+    }
+    return newFav;
+  }
+
+  @Transactional(readOnly = true)
+  public boolean isFavorite(Identity actor, long comic) {
+    if (actor == null) return false;
+    var rows = jdbc.queryForList(
+        "SELECT i.IsFavorite FROM dbo.CollectionItem i JOIN dbo.LibraryCollection c ON c.Id=i.CollectionId "
+            + "WHERE c.UserId=? AND c.SystemKey='LIBRARY' AND i.ComicId=?",
+        actor.userId(), comic);
+    if (rows.isEmpty()) return false;
+    Boolean b = (Boolean) rows.getFirst().get("IsFavorite");
+    return b != null && b;
+  }
+
+  @Transactional(readOnly = true)
+  public PageResult<ComicSummary> favorites(Identity actor, int page, int size) {
+    self(actor);
+    ensureDefault(actor.userId());
+    String from =
+        " FROM dbo.CollectionItem i JOIN dbo.LibraryCollection col ON col.Id=i.CollectionId "
+            + " JOIN dbo.Comic c WITH (HOLDLOCK) ON c.Id=i.ComicId WHERE col.UserId=? AND col.SystemKey='LIBRARY' AND i.IsFavorite=1 AND"
+            + PUBLIC;
+    long count = jdbc.queryForObject("SELECT COUNT_BIG(*)" + from, Long.class, actor.userId());
+    var ids =
+        jdbc.queryForList(
+            "SELECT i.ComicId"
+                + from
+                + " ORDER BY i.AddedAt DESC, i.ComicId DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+            Long.class,
+            actor.userId(),
+            PageResult.offset(page, size),
+            size);
+    return PageResult.of(ids.stream().map(catalog::summary).toList(), page, size, count);
+  }
+
   private Bookmark bookmarkRow(Identity actor, long id) {
     self(actor);
     var rows =

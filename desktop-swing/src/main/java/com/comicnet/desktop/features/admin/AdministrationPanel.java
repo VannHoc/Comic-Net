@@ -61,26 +61,40 @@ public final class AdministrationPanel extends JPanel implements Workspace {
     super(new BorderLayout(0, 20));
     this.api = api;
     setOpaque(false);
-    setBorder(new EmptyBorder(32, 32, 24, 32));
-    JPanel heading = new JPanel(new BorderLayout(16, 0));
+    setBorder(new EmptyBorder(Theme.CONTENT_PADDING, Theme.CONTENT_PADDING, 24, Theme.CONTENT_PADDING));
+    JPanel heading = new JPanel(new BorderLayout(0, 4));
     heading.setOpaque(false);
-    JLabel title = new JLabel("Quản trị nền tảng");
-    title.setFont(Theme.heading(27));
-    heading.add(title);
-    heading.add(
-        button(
-            "Tải lại",
-            () -> {
-              if (api.signedIn()) loadUsers();
-              else message.setText("Đăng nhập bằng tài khoản quản trị viên.");
-            }),
-        BorderLayout.EAST);
+    JLabel eyebrow = Theme.plainLabel("QUẢN TRỊ NỀN TẢNG");
+    eyebrow.setForeground(Theme.PRIMARY);
+    eyebrow.setFont(Theme.heading(11));
+    JLabel title = new JLabel("Quản trị hệ thống");
+    title.setFont(Theme.heading(28));
+    title.setForeground(Theme.TEXT);
+    JLabel sub = Theme.plainLabel("Phân quyền tài khoản, quản lý nhóm dịch và thiết lập membership.");
+    sub.setFont(Theme.label(13));
+    sub.setForeground(Theme.MUTED);
+
+    JPanel titleBox = new JPanel(new GridLayout(0, 1, 0, 2));
+    titleBox.setOpaque(false);
+    titleBox.add(eyebrow);
+    titleBox.add(title);
+    titleBox.add(sub);
+    heading.add(titleBox, BorderLayout.WEST);
+
+    JButton reloadBtn = button("Tải lại", () -> {
+      if (api.signedIn()) loadUsers();
+      else message.setText("Đăng nhập bằng tài khoản quản trị viên.");
+    });
+    reloadBtn.setIcon(UiIcons.refresh(14, Theme.TEXT));
+    heading.add(reloadBtn, BorderLayout.EAST);
     add(heading, BorderLayout.NORTH);
+
     JTabbedPane tabs = new JTabbedPane();
-    tabs.addTab("Tài khoản", userView());
-    tabs.addTab("Nhóm", teamView());
-    tabs.addTab("Membership", memberView());
-    add(tabs, BorderLayout.CENTER);
+    tabs.putClientProperty("JTabbedPane.tabType", "card");
+    tabs.setFont(Theme.brand(13));
+    tabs.addTab("Tài khoản", UiIcons.user(14, Theme.MUTED), userView());
+    tabs.addTab("Nhóm dịch", UiIcons.shield(14, Theme.MUTED), teamView());
+    tabs.addTab("Membership", UiIcons.settings(14, Theme.MUTED), memberView());
     add(message, BorderLayout.SOUTH);
     tabs.addChangeListener(
         e -> {

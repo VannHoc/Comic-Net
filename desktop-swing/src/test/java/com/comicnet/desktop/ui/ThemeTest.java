@@ -7,8 +7,9 @@ import org.junit.jupiter.api.Test;
 final class ThemeTest {
   @Test
   void usesTheSpecifiedLightPalette() {
-    assertEquals(0xFFF8FAFC, Theme.BACKGROUND.getRGB());
-    assertEquals(0xFF111827, Theme.TEXT.getRGB());
+    assertEquals(0xFFF6F8FB, Theme.BACKGROUND.getRGB());
+    assertEquals(0xFF172033, Theme.TEXT.getRGB());
+    assertEquals(0xFFF65D4E, Theme.ACTION.getRGB());
   }
 
   @Test
