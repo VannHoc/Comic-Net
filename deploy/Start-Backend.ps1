@@ -80,6 +80,41 @@ try {
     $env:S3_ENDPOINT='http://127.0.0.1:9000';$env:S3_REGION='us-east-1';$env:S3_BUCKET='comicnet-dev';$env:S3_CREATE_BUCKET='true'
     $env:SMTP_HOST='127.0.0.1';$env:SMTP_PORT='1025'
 
+    if ($Mode -ne 'Verify') {
+        $taskListeners=@(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+        foreach($taskListener in $taskListeners){
+            $taskOwner=Get-CimInstance Win32_Process -Filter "ProcessId=$($taskListener.OwningProcess)" -ErrorAction SilentlyContinue
+            $taskCommand=[string]$taskOwner.CommandLine
+            $taskJar=Join-Path $projectDirectory 'backend\target\comic-net-backend-0.1.0-SNAPSHOT.jar'
+            $taskArgMatch=[regex]::Match($taskCommand,'-cp @(?<path>\S+\.argfile)')
+            $taskOwnedSource=$false
+            if($taskCommand.Contains('com.comicnet.ComicNetApplication') -and $taskArgMatch.Success){
+                $taskArgPath=$taskArgMatch.Groups['path'].Value
+                if(Test-Path -LiteralPath $taskArgPath){
+                    $taskExpectedClasses=(Join-Path $projectDirectory 'backend\target\classes').Replace('\','\\')
+                    $taskOwnedSource=[IO.File]::ReadAllText($taskArgPath).Contains($taskExpectedClasses)
+                }
+            }
+            $taskOwnedJar=$taskCommand.Contains($taskJar)
+            if(!$taskOwner -or (!$taskOwnedSource -and !$taskOwnedJar)){
+                throw "Port $Port is used by another program; it was not stopped."
+            }
+            Write-Host "Stopping previous Comic Net backend PID $($taskOwner.ProcessId) on port $Port."
+            Stop-Process -Id $taskOwner.ProcessId -ErrorAction Stop
+        }
+        for($taskWait=0;$taskWait -lt 30;$taskWait++){
+            if(!@(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue).Count){break}
+            Start-Sleep -Milliseconds 200
+        }
+        if(@(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue).Count){
+            throw "Port $Port did not become free after stopping the previous backend."
+        }
+    }
+    if ($Mode -eq 'Run' -and !$FromSource) {
+        Write-Host 'Building the current backend source before starting the JAR.'
+        & .\mvnw.cmd -B -ntp -pl backend -am -DskipTests package
+        if ($LASTEXITCODE -ne 0) { throw 'Backend build failed; an older JAR will not be started.' }
+    }
     if ($Mode -ne 'Run') {
         if ($IntegrationTest) {
             & .\mvnw.cmd -B -ntp -pl backend -Psql-integration "-Dit.test=$IntegrationTest" test-compile failsafe:integration-test failsafe:verify

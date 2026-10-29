@@ -14,8 +14,10 @@ public final class WalletPanel extends JPanel implements Workspace {
   private final UiTasks requests = new UiTasks();
   private final JLabel paid = Theme.plainLabel("—"), reward = Theme.plainLabel("—");
   private final JLabel message = Theme.plainLabel("Đăng nhập để xem ví.");
-  private final RemoteTable ledger;
+  private final RemoteTable ledger, orders, entitlements;
   private final JButton retryPayment = new JButton("Tiếp tục đơn thử nghiệm");
+  private final JButton failPayment = new JButton("Mô phỏng thất bại");
+  private final MutationKey paymentKey = new MutationKey();
   private long pendingOrderId;
 
   public WalletPanel(ApiClient api) {
@@ -40,7 +42,34 @@ public final class WalletPanel extends JPanel implements Workspace {
         row -> new Object[] {row.path("createdAt").asText(), row.path("source").asText(),
             row.path("tokenType").asText(), row.path("delta").asLong(),
             row.path("balanceAfter").asLong(), row.path("status").asText()});
-    add(ledger, BorderLayout.CENTER);
+    orders = new RemoteTable(api,
+        new String[] {"Mã đơn", "Ngày tạo", "Gói", "Xu mua", "Số tiền VND", "Trạng thái"},
+        page -> "/me/payment-orders?page=" + page + "&size=20",
+        row -> new Object[] {row.path("id").asLong(), row.path("createdAt").asText(),
+            row.path("packageCode").asText(), row.path("paidCoin").asLong(),
+            row.path("amountVnd").asLong(), row.path("status").asText()});
+    orders.onSelection(row -> {
+      if (row != null && "PENDING".equals(row.path("status").asText())) {
+        pendingOrderId = row.path("id").asLong();
+        retryPayment.setEnabled(true);
+        failPayment.setEnabled(true);
+      } else {
+        pendingOrderId = 0;
+        retryPayment.setEnabled(false);
+        failPayment.setEnabled(false);
+      }
+    });
+    entitlements = new RemoteTable(api,
+        new String[] {"Truyện", "Chương", "Nguồn quyền", "Trạng thái", "Có hiệu lực", "Hết hạn"},
+        page -> "/me/entitlements?page=" + page + "&size=20",
+        row -> new Object[] {row.path("comicTitle").asText(), row.path("chapterTitle").asText(),
+            row.path("kind").asText(), row.path("state").asText(),
+            row.path("validFrom").asText(), row.path("validTo").isNull() ? "Vĩnh viễn" : row.path("validTo").asText()});
+    JTabbedPane history = new JTabbedPane();
+    history.addTab("Giao dịch xu", ledger);
+    history.addTab("Đơn nạp", orders);
+    history.addTab("Quyền mở khóa", entitlements);
+    add(history, BorderLayout.CENTER);
     JPanel footer = new JPanel(new BorderLayout());
     footer.setOpaque(false);
     JButton refresh = new JButton("Làm mới ví");
@@ -48,12 +77,15 @@ public final class WalletPanel extends JPanel implements Workspace {
     JButton topUp = new JButton("Nạp Paid Coin · Sandbox local");
     topUp.addActionListener(event -> showSandboxOffers());
     retryPayment.setEnabled(false);
+    failPayment.setEnabled(false);
     retryPayment.addActionListener(event -> settlePending());
+    failPayment.addActionListener(event -> failPending());
     JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
     actions.setOpaque(false);
     actions.add(refresh);
     actions.add(topUp);
     actions.add(retryPayment);
+    actions.add(failPayment);
     footer.add(actions, BorderLayout.WEST);
     footer.add(message, BorderLayout.CENTER);
     add(footer, BorderLayout.SOUTH);
@@ -79,14 +111,15 @@ public final class WalletPanel extends JPanel implements Workspace {
       EditDialog dialog = new EditDialog(this, "Nạp xu Sandbox · không dùng tiền thật");
       JComboBox<String> packages = new JComboBox<>(labels);
       dialog.form.field("Gói xu", packages);
-      MutationKey key = new MutationKey();
       dialog.submit(() -> {
         int selected = packages.getSelectedIndex();
         if (selected < 0) throw new IllegalArgumentException("Chọn một gói xu.");
         Map<String, Object> body = Map.of("packageCode",
             offers.get(selected).path("code").asText());
-        return api.create("/me/payment-orders", body, key.forInput("sandbox-payment", body));
+        return api.create("/me/payment-orders", body,
+            paymentKey.forInput("sandbox-payment", body));
       }, order -> {
+        paymentKey.confirmed();
         pendingOrderId = order.body().path("id").asLong();
         retryPayment.setEnabled(true);
         settlePending();
@@ -111,9 +144,32 @@ public final class WalletPanel extends JPanel implements Workspace {
             pendingOrderId = 0;
             retryPayment.setEnabled(false);
             onShown();
+            orders.reload();
           } else message.setText("Đơn #" + orderId + " chưa hoàn tất; thử lại sau.");
-        }, error -> message.setText("Đơn #" + orderId
-            + " đang chờ xử lý. Nhấn Tiếp tục đơn thử nghiệm để thử lại."));
+        }, error -> {
+          Throwable cause = ApiClient.unwrap(error);
+          if (cause instanceof ApiClient.ApiFailure failure && failure.status() == 409) {
+            pendingOrderId = 0;
+            retryPayment.setEnabled(false);
+            failPayment.setEnabled(false);
+            orders.reload();
+            message.setText("Đơn #" + orderId + " đã thất bại hoặc hết hạn. Tạo đơn nạp mới.");
+          } else message.setText("Không xử lý được đơn #" + orderId + ": " + cause.getMessage());
+        });
+  }
+
+  private void failPending() {
+    if (pendingOrderId <= 0) return;
+    long id = pendingOrderId;
+    requests.run(this, message,
+        api.request("POST", "/me/payment-orders/" + id + "/sandbox-fail", null, null),
+        reply -> {
+          pendingOrderId = 0;
+          retryPayment.setEnabled(false);
+          failPayment.setEnabled(false);
+          orders.reload();
+          message.setText("Đơn #" + id + " đã được đánh dấu thất bại trong sandbox.");
+        });
   }
 
   private JPanel balanceCard(String caption, JLabel amount) {
@@ -134,15 +190,29 @@ public final class WalletPanel extends JPanel implements Workspace {
       paid.setText("—"); reward.setText("—");
       message.setText("Đăng nhập để xem ví.");
       ledger.clear();
+      orders.clear();
+      entitlements.clear();
       return;
     }
     requests.run(this, message, api.get("/me/wallet"), reply -> {
       paid.setText(Long.toString(reply.body().path("paidCoin").asLong()));
       reward.setText(Long.toString(reply.body().path("rewardCoin").asLong()));
       ledger.first();
+      orders.first();
+      entitlements.first();
     });
   }
 
-  @Override public void sessionChanged() { requests.close(); ledger.clear(); onShown(); }
-  @Override public void close() { requests.close(); ledger.close(); }
+  @Override public void sessionChanged() {
+    requests.close();
+    pendingOrderId = 0;
+    retryPayment.setEnabled(false);
+    failPayment.setEnabled(false);
+    paymentKey.confirmed();
+    ledger.clear();
+    orders.clear();
+    entitlements.clear();
+    onShown();
+  }
+  @Override public void close() { requests.close(); ledger.close(); orders.close(); entitlements.close(); }
 }

@@ -123,6 +123,10 @@ public final class RemoteTable extends JPanel implements AutoCloseable {
     reload(null);
   }
 
+  public void reloadSelecting(String id) {
+    reload(id);
+  }
+
   private void reload(String selectedId) {
     String url = path.apply(page);
     if (url == null) {

@@ -9,6 +9,7 @@ import com.comicnet.desktop.features.catalog.CatalogPanel;
 import com.comicnet.desktop.features.analytics.RankingPanel;
 import com.comicnet.desktop.features.library.LibraryPanel;
 import com.comicnet.desktop.features.wallet.WalletPanel;
+import com.comicnet.desktop.features.wallet.AdminWalletPanel;
 import com.comicnet.desktop.features.notification.NotificationsPanel;
 import com.comicnet.desktop.features.observability.OperationsPanel;
 import com.comicnet.desktop.features.publishing.PublishingPanel;
@@ -91,6 +92,7 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
             this::read,
             reader::sessionChanged));
     addWorkspace("Ví xu", new WalletPanel(api));
+    addWorkspace("Quản lý ví xu", new AdminWalletPanel(api));
     addWorkspace(
         "Bảng xếp hạng",
         new RankingPanel(
@@ -214,12 +216,13 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
   }
 
   private void refreshRoleNavigation() {
-    for (String title : java.util.List.of("Xuất bản", "Quản trị", "Vận hành", "Hệ thống")) {
+    for (String title : java.util.List.of("Xuất bản", "Quản trị", "Quản lý ví xu", "Vận hành", "Hệ thống")) {
       JButton button = navButtons.get(title);
       if (button != null) button.setVisible(false);
     }
     if (!api.signedIn()) {
       if ("Xuất bản".equals(active) || "Quản trị".equals(active)
+          || "Quản lý ví xu".equals(active)
           || "Vận hành".equals(active) || "Hệ thống".equals(active)) showWorkspace("Khám phá");
       return;
     }
@@ -231,10 +234,12 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
       boolean creator = admin || roles.contains("CREATOR");
       navButtons.get("Xuất bản").setVisible(creator);
       navButtons.get("Quản trị").setVisible(admin);
+      navButtons.get("Quản lý ví xu").setVisible(admin);
       navButtons.get("Vận hành").setVisible(admin);
       navButtons.get("Hệ thống").setVisible(admin);
       if (("Xuất bản".equals(active) && !creator)
-          || (("Quản trị".equals(active) || "Vận hành".equals(active) || "Hệ thống".equals(active)) && !admin))
+          || (("Quản trị".equals(active) || "Quản lý ví xu".equals(active)
+              || "Vận hành".equals(active) || "Hệ thống".equals(active)) && !admin))
         showWorkspace("Khám phá");
       navigation.revalidate();
       navigation.repaint();

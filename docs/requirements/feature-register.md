@@ -161,7 +161,7 @@ Revision3 Swing-first, ngày2026-10-27. Mỗi bullet dưới `### Chức năng` 
 | M11-F03 | Nhận Reward Coin. | 4 | Not Started | 648 |
 | M11-F04 | Kiểm tra số dư. | 4 | Implemented; SQL Tested; Swing chưa Verified | 649 |
 | M11-F05 | Ledger Transactions. | 4 | Implemented balanced debit/credit; SQL Tested; đối soát nâng cao còn thiếu | 650 |
-| M11-F06 | Purchase / Spend. | 4 | Implemented mua chương; SQL Tested; Swing chưa Verified | 651 |
+| M11-F06 | Purchase / Spend. | 4 | Implemented mua chương; SQL và Swing GUI Verified cho luồng REWARD M20-F06 ngày 2026-10-29; các kiểu chi khác chưa QA | 651 |
 | M11-F07 | Refund / Adjustment. | 4 | Not Started | 652 |
 | M11-F08 | Transaction History. | 4 | Implemented; SQL Tested; Swing chưa Verified | 653 |
 | M11-F09 | Idempotency. | 4 | Implemented cho WalletService; SQL Tested | 654 |
@@ -288,9 +288,9 @@ Revision3 Swing-first, ngày2026-10-27. Mỗi bullet dưới `### Chức năng` 
 | M20-F03 | VIP Entitlement. | 4 | Not Started | 910 |
 | M20-F04 | Fast Pass Entitlement. | 4 | Not Started | 911 |
 | M20-F05 | Promotional Access. | 4 | Not Started | 912 |
-| M20-F06 | Reward-Based Unlock. | 4 | Not Started | 913 |
+| M20-F06 | Reward-Based Unlock. | 4 | Implemented; SQL/RustFS và Swing GUI end-to-end Verified 2026-10-29 (mua, đọc, đăng nhập lại, quyền lưu SQL) | 913 |
 | M20-F07 | Access Validation. | 2 FREE/RESTRICTED; 4 thương mại | Implemented FREE/entitlement; SQL Tested; Swing chưa Verified | 914 |
-| M20-F08 | Entitlement History. | 4 | Not Started | 915 |
+| M20-F08 | Entitlement History. | 4 | Implemented API/Swing; SQL Tested và GUI xác nhận bản ghi PURCHASE/ACTIVE sau đăng nhập lại 2026-10-29 | 915 |
 | M20-F09 | Access Expiration / Revocation. | 4 | Not Started | 916 |
 | M20-F10 | Cross-Device Access Synchronization. | 4; 6 realtime | Not Started | 917 |
 ## M21 — SYSTEM OBSERVABILITY & RELIABILITY

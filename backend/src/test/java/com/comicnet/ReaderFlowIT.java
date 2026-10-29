@@ -51,6 +51,7 @@ class ReaderFlowIT {
   @Autowired ReaderService reader;
   @Autowired ChapterPurchaseService purchases;
   @Autowired WalletService wallet;
+  @Autowired com.comicnet.entitlement.service.EntitlementService entitlements;
   @Autowired ProgressService progress;
   @Autowired JdbcTemplate jdbc;
   @Autowired jakarta.persistence.EntityManager entities;
@@ -327,6 +328,15 @@ class ReaderFlowIT {
         .isInstanceOfSatisfying(DomainException.class,
             error -> assertThat(error.status()).isEqualTo(409));
     assertThat(reader.access(c.reader(), c.chapter()).allowed()).isTrue();
+    assertThat(entitlements.history(c.reader().userId(), 0, 20).items()).singleElement()
+        .satisfies(item -> {
+          assertThat(item.chapterId()).isEqualTo(c.chapter());
+          assertThat(item.comicTitle()).isEqualTo("Truyện đọc thử");
+          assertThat(item.chapterTitle()).isEqualTo("Chương một");
+          assertThat(item.kind()).isEqualTo("PURCHASE");
+          assertThat(item.state()).isEqualTo("ACTIVE");
+        });
+    assertThat(entitlements.history(noCoins.userId(), 0, 20).items()).isEmpty();
     assertThat(reader.manifest(c.reader(), c.chapter(), "JPEG").pages()).hasSize(1);
     assertThat(reader.access(c.admin(), c.chapter()).allowed()).isFalse();
     assertThat(purchases.unlock(c.reader(), c.chapter(), price.id(), requestKey).status())
@@ -339,6 +349,50 @@ class ReaderFlowIT {
     mvc.perform(post("/api/v1/chapters/" + c.chapter() + "/unlock")
         .contentType("application/json").content("{\"priceId\":" + price.id() + "}"))
         .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void rewardCoinUnlockDebitsRewardOnlyAndGrantsBuyerAccess() throws Exception {
+    var c = context();
+    var price = purchases.setPrice(c.creator(), c.chapter(), "REWARD", 25);
+    publishing.patchChapter(c.creator(), c.chapter(),
+        json.readTree("{\"accessPolicy\":\"RESTRICTED\"}"),
+        Etags.of(publishing.chapterToken(c.chapter())));
+    wallet.apply(c.reader().userId(), "REWARD", 40, "CHECK_IN", key());
+    assertThat(reader.access(c.reader(), c.chapter()).allowed()).isFalse();
+    var result = purchases.unlock(c.reader(), c.chapter(), price.id(), key());
+    assertThat(result.status()).isEqualTo("COMPLETED");
+    assertThat(wallet.balance(c.reader().userId()).paidCoin()).isZero();
+    assertThat(wallet.balance(c.reader().userId()).rewardCoin()).isEqualTo(15);
+    assertThat(reader.access(c.reader(), c.chapter()).allowed()).isTrue();
+    assertThat(reader.access(c.admin(), c.chapter()).allowed()).isFalse();
+    assertThat(entitlements.history(c.reader().userId(), 0, 20).items()).singleElement()
+        .satisfies(item -> assertThat(item.kind()).isEqualTo("PURCHASE"));
+    assertThat(jdbc.queryForObject("SELECT CurrencyCode FROM dbo.Purchase WHERE Id=?",
+        String.class, result.purchaseId())).isEqualTo("REWARD");
+  }
+
+  @Test
+  @org.springframework.test.annotation.Commit
+  @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(
+      named = "COMICNET_CREATE_GUI_FIXTURE", matches = "true")
+  void prepareRewardGuiFixture() throws Exception {
+    var c = context();
+    purchases.setPrice(c.creator(), c.chapter(), "REWARD", 25);
+    publishing.patchChapter(c.creator(), c.chapter(),
+        json.readTree("{\"accessPolicy\":\"RESTRICTED\"}"),
+        Etags.of(publishing.chapterToken(c.chapter())));
+    wallet.apply(c.reader().userId(), "REWARD", 40, "CHECK_IN", key());
+    wallet.apply(c.reader().userId(), "PAID", 7, "SANDBOX_PAYMENT", key());
+    // These two accounts exist solely to publish this fixture; keep them unusable afterward.
+    jdbc.update("UPDATE dbo.[User] SET Status='SUSPENDED' WHERE Id IN (?,?)",
+        c.admin().userId(), c.creator().userId());
+    var file = java.nio.file.Path.of("../.local/qa/reward-gui-fixture.txt");
+    java.nio.file.Files.createDirectories(file.getParent());
+    java.nio.file.Files.writeString(file,
+        "readerId=" + c.reader().userId() + "\n"
+            + "readerEmail=" + auth.user(c.reader().userId()).email() + "\n"
+            + "comicId=" + c.comic() + "\nchapterId=" + c.chapter() + "\n");
   }
 
   @Test

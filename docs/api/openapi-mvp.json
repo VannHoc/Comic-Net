@@ -14619,6 +14619,19 @@
         "tags": ["Wallet"]
       }
     },
+    "/admin/wallets": {
+      "get": {"operationId": "listAdminWallets", "responses": {"200": {"description": "Paged accounts with paid, reward and total coin balances"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Wallet"]}
+    },
+    "/admin/wallets/{id}": {
+      "get": {"operationId": "getAdminWalletBalance", "responses": {"200": {"description": "Selected user's paid and reward balances"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Wallet"]}
+    },
+    "/admin/wallets/{id}/transactions": {
+      "get": {"operationId": "getAdminWalletTransactions", "responses": {"200": {"description": "Selected user's wallet transactions"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Wallet"]}
+    },
+    "/admin/wallets/{id}/adjustments": {
+      "get": {"operationId": "getAdminWalletAdjustments", "responses": {"200": {"description": "Audited wallet adjustments"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Wallet"]},
+      "post": {"operationId": "adjustAdminWallet", "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["tokenType", "amount", "direction", "reason"], "properties": {"tokenType": {"type": "string", "enum": ["PAID", "REWARD"]}, "amount": {"type": "integer", "format": "int64", "minimum": 1}, "direction": {"type": "string", "enum": ["GRANT", "REVOKE"]}, "reason": {"type": "string", "minLength": 1, "maxLength": 500}}}}}}, "responses": {"200": {"description": "Atomic wallet adjustment with audit"}, "403": {"description": "Administrator required"}, "409": {"description": "Insufficient coin or reused key"}}, "security": [{"BearerAuth": []}], "tags": ["Wallet"]}
+    },
     "/chapters/{id}/prices": {
       "get": {
         "operationId": "getChapterPrices",
@@ -14646,7 +14659,11 @@
     "/me/coin-packages": {
       "get": {"operationId": "listLocalCoinPackages", "responses": {"200": {"description": "Local sandbox offers"}}, "tags": ["Finance"]}
     },
+    "/me/entitlements": {
+      "get": {"operationId": "listMyEntitlements", "responses": {"200": {"description": "Own paginated chapter entitlement history"}, "401": {"description": "Authentication required"}}, "security": [{"BearerAuth": []}], "tags": ["Entitlement"]}
+    },
     "/me/payment-orders": {
+      "get": {"operationId": "listMyLocalPaymentOrders", "responses": {"200": {"description": "Own paginated sandbox payment orders"}, "401": {"description": "Authentication required"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]},
       "post": {"operationId": "createLocalPaymentOrder", "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}], "responses": {"200": {"description": "Pending local sandbox order"}}, "tags": ["Finance"]}
     },
     "/me/payment-orders/{id}": {
@@ -14654,6 +14671,21 @@
     },
     "/me/payment-orders/{id}/sandbox-settle": {
       "post": {"operationId": "settleLocalPaymentOrder", "responses": {"200": {"description": "Local-only simulated provider settlement and Paid Coin credit"}}, "tags": ["Finance"]}
+    },
+    "/me/payment-orders/{id}/sandbox-fail": {
+      "post": {"operationId": "failLocalPaymentOrder", "responses": {"200": {"description": "Mark a pending sandbox order failed"}, "409": {"description": "Order is no longer pending"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]}
+    },
+    "/admin/coin-packages": {
+      "get": {"operationId": "listAdminCoinPackages", "responses": {"200": {"description": "All local coin packages"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]}
+    },
+    "/admin/coin-packages/{code}": {
+      "put": {"operationId": "saveAdminCoinPackage", "responses": {"200": {"description": "Create or update package; existing orders retain snapshots"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]}
+    },
+    "/admin/payment-orders": {
+      "get": {"operationId": "listAdminPaymentOrders", "responses": {"200": {"description": "Paged local payment orders"}, "403": {"description": "Administrator required"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]}
+    },
+    "/admin/payment-orders/{id}/refund": {
+      "post": {"operationId": "refundAdminPaymentOrder", "responses": {"200": {"description": "Debit paid coins once and record refund reason"}, "403": {"description": "Administrator required"}, "409": {"description": "Insufficient coins or order not completed"}}, "security": [{"BearerAuth": []}], "tags": ["Finance"]}
     },
     "/admin/payment-reconciliation": {
       "post": {"operationId": "reconcileLocalPayments", "responses": {"200": {"description": "Persist sandbox order/ledger mismatch snapshot"}}, "tags": ["Finance"]}

@@ -3,12 +3,17 @@ package com.comicnet.entitlement.service;
 import com.comicnet.entitlement.api.ReadingAccess;
 import com.comicnet.entitlement.api.EntitlementGrants;
 import com.comicnet.identity.api.Identity;
+import com.comicnet.common.web.PageResult;
+import java.time.LocalDateTime;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EntitlementService implements ReadingAccess, EntitlementGrants {
+  public record HistoryItem(long id, long chapterId, String comicTitle, String chapterTitle,
+      String kind, String state,
+      LocalDateTime validFrom, LocalDateTime validTo) {}
   private final JdbcTemplate jdbc;
 
   public EntitlementService(JdbcTemplate jdbc) { this.jdbc = jdbc; }
@@ -30,6 +35,25 @@ public class EntitlementService implements ReadingAccess, EntitlementGrants {
         + " AND ValidFrom<=SYSUTCDATETIME()"
         + " AND (ValidTo IS NULL OR ValidTo>SYSUTCDATETIME())", Integer.class, userId, chapterId);
     return found != null && found > 0;
+  }
+
+  @Transactional(readOnly = true)
+  public PageResult<HistoryItem> history(long userId, int page, int size) {
+    PageResult.validate(page, size);
+    long total = jdbc.queryForObject("SELECT COUNT_BIG(*) FROM dbo.UserEntitlement WHERE UserId=?",
+        Long.class, userId);
+    var items = jdbc.query("SELECT e.Id,e.ChapterId,c.Title,ch.Title,e.Kind,e.State,e.ValidFrom,e.ValidTo"
+        + " FROM dbo.UserEntitlement e"
+        + " JOIN dbo.Chapter ch ON ch.Id=e.ChapterId"
+        + " JOIN dbo.ComicTranslation t ON t.Id=ch.TranslationId"
+        + " JOIN dbo.Comic c ON c.Id=t.ComicId"
+        + " WHERE e.UserId=? ORDER BY e.Id DESC"
+        + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+        (rs, row) -> new HistoryItem(rs.getLong(1), rs.getLong(2), rs.getString(3),
+            rs.getString(4), rs.getString(5), rs.getString(6),
+            rs.getObject(7, LocalDateTime.class), rs.getObject(8, LocalDateTime.class)),
+        userId, PageResult.offset(page, size), size);
+    return PageResult.of(items, page, size, total);
   }
 
   /** Called only by a purchase that has already locked the user in the same SQL transaction. */

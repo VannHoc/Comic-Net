@@ -28,9 +28,25 @@ function Confirm-LocalService([string]$Name,[string]$Binary,[string]$Health,[str
         $taskProcess=$null
     }
     if(!$taskProcess){
-        try{$taskOccupied=Invoke-WebRequest -UseBasicParsing -Uri $Health -TimeoutSec 2 -ErrorAction Stop;if($taskOccupied.StatusCode -eq 200){throw 'PORT_OCCUPIED'}}catch{if($_.Exception.Message -eq 'PORT_OCCUPIED'){throw "$Name endpoint is already in use by an unmanaged service."}}
-        $taskProcess=Start-Process -FilePath $Binary -ArgumentList $Arguments -WorkingDirectory $taskLocal -WindowStyle Hidden -RedirectStandardOutput (Join-Path $taskData ($Name+'.log')) -RedirectStandardError (Join-Path $taskData ($Name+'.error.log')) -PassThru
-        [IO.File]::WriteAllText($taskPidFile,[string]$taskProcess.Id)
+        $taskPort=([uri]$Health).Port
+        $taskListeners=@(Get-NetTCPConnection -LocalPort $taskPort -State Listen -ErrorAction SilentlyContinue)
+        if($taskListeners.Count -gt 0){
+            $taskOwners=@($taskListeners | Select-Object -ExpandProperty OwningProcess -Unique)
+            if($taskOwners.Count -ne 1){throw "$Name port $taskPort has multiple owners; inspect the listening processes."}
+            $taskCandidate=Get-Process -Id $taskOwners[0] -ErrorAction SilentlyContinue
+            if(!$taskCandidate -or $taskCandidate.Path -ne $Binary){
+                throw "$Name port $taskPort is in use by another program. No process was stopped."
+            }
+            try{$taskOccupied=Invoke-WebRequest -UseBasicParsing -Uri $Health -TimeoutSec 2 -ErrorAction Stop}
+            catch{throw "$Name is running from this project but its health check failed: $Health"}
+            if($taskOccupied.StatusCode -ne 200){throw "$Name health check returned $($taskOccupied.StatusCode)."}
+            $taskProcess=$taskCandidate
+            [IO.File]::WriteAllText($taskPidFile,[string]$taskProcess.Id)
+            Write-Host "$Name already running from this project; reusing PID $($taskProcess.Id)."
+        }else{
+            $taskProcess=Start-Process -FilePath $Binary -ArgumentList $Arguments -WorkingDirectory $taskLocal -WindowStyle Hidden -RedirectStandardOutput (Join-Path $taskData ($Name+'.log')) -RedirectStandardError (Join-Path $taskData ($Name+'.error.log')) -PassThru
+            [IO.File]::WriteAllText($taskPidFile,[string]$taskProcess.Id)
+        }
     }
     for($taskAttempt=0;$taskAttempt -lt 30;$taskAttempt++){
         try{if((Invoke-WebRequest -UseBasicParsing -Uri $Health -TimeoutSec 2).StatusCode -eq 200){Write-Host "$Name ready: $Health";return}}catch{}
