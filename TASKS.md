@@ -2,6 +2,18 @@
 
 Mỗi phiên cập nhật trạng thái và Agent phụ trách gần nhất theo bằng chứng. `PASS` ở đây không mặc nhiên là nghiệm thu toàn bộ giao diện.
 
+**Ưu tiên vừa hoàn thành — Kiểm Toán Toàn Diện Repository & Xây Dựng Trọn Bộ 13 Tài Liệu Bảo Vệ Đồ Án Comic Net (2026-10-30 - Google Antigravity):**
+- **Hoàn thành kiểm toán toàn diện mã nguồn & lịch sử:**
+  - Nghiên cứu từ tài liệu gốc prj_app.md, srs.md đến mã nguồn commit c30c6be.
+  - Đối chiếu 23 module ban đầu -> 19 module nghiệp vụ thực tế; giải trình chi tiết việc gộp minigame, chuyển dataprotection, xóa 2 placeholder rỗng ai và offline, nghỉ hưu MODERATOR (V31), gỡ bỏ hoàn toàn ràng buộc độ tuổi (V32).
+  - Phân tích chi tiết ngăn xếp công nghệ: Java 21, Spring Boot 4.1.2, Java Swing + FlatLaf, SQL Server 2025 (82 bảng), RustFS S3, Flyway (32 migrations).
+  - Kiểm toán toàn diện 26 màn hình/dialog Java Swing và truy vết 30+ nút tương tác đầu-cuối.
+- **Hoàn thành bộ tài liệu bảo vệ đồ án chuẩn mực tại docs/defense/:**
+  - 00_TONG_QUAN.md đến 12_MA_TRAN_TRUY_VET.md (13 tài liệu chuyên sâu) và BAO_CAO_TOAN_DIEN_COMIC_NET.md.
+- **Trạng thái kiểm thử & kỹ thuật:**
+  - mvnw test-compile: BUILD SUCCESS.
+  - Unit tests: 55/55 PASS; OpenAPI Contract: 174/174 PASS; Module Boundaries: 19 modules, 0 cycle PASS.
+
 **Ưu tiên vừa hoàn thành — Sửa Lỗi Giao Diện Creator Studio V2, Xóa Chương, Đồng Bộ Xuất Bản Công Khai Trang Chủ & Đổi Tên Tab Trang Chủ (2026-10-30 - Google Antigravity):**
 - **Lỗi giao diện đè & dính chữ:**
   - `PublishingPanel.java`: Thiết kế lại bố cục `topSection` (BoxLayout.Y_AXIS) gộp Header + KPI Cards + Filter Bar cố định phía trên; đưa `cardsGrid` vào `cardsWrapper` (`BorderLayout.NORTH`) bên trong `JScrollPane` với cờ `setOpaque(true); setBackground(Theme.BACKGROUND)` toàn diện, xóa bỏ 100% hiện tượng chồng đè và nhòe pixel Swing.

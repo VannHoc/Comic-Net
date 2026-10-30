@@ -1,5 +1,21 @@
 # Comic Net — điểm tiếp nối
 
+**Checkpoint 2026-10-30 — Google Antigravity, Hoàn Thành Kiểm Toán Toàn Diện Mã Nguồn & Xây Dựng Trọn Bộ 13 Tài Liệu Bảo Vệ Đồ Án (Báo Cáo + 13 Chuyên Đề Defense PASS 100%):**
+- **Agent:** Google Antigravity; ngày: 2026-10-30.
+- **Nội dung thực hiện:**
+  - Hoàn tất kiểm toán toàn diện mã nguồn repository từ thiết kế gốc (`prj_app.md`, `srs.md`) đến commit hiện tại `c30c6be`.
+  - Đối chiếu biến động kiến trúc: 23 module ban đầu thành 19 module nghiệp vụ thực tế; gộp `minigame` vào `gamification`, chuyển `dataprotection` thành quy trình vận hành, loại bỏ 2 placeholder rỗng `ai` và `offline`; nghỉ hưu vai trò `MODERATOR` (V31), gỡ bỏ hoàn toàn ràng buộc độ tuổi (V32).
+  - Khảo sát và tài liệu hóa 82 bảng dữ liệu SQL Server, 174 operations OpenAPI contract, 26 giao diện Java Swing và truy vết 30+ nút tương tác cốt lõi.
+  - Tạo mới toàn bộ 13 văn bản chuyên đề tại `docs/defense/` (`00_` đến `12_`) và 1 bản báo cáo tổng luận toàn diện tại `docs/BAO_CAO_TOAN_DIEN_COMIC_NET.md`.
+  - Xây dựng ngân hàng 150 câu hỏi phản biện của hội đồng 3 giảng viên kèm câu trả lời chuẩn mực, phân tích sâu và vị trí mở file code chứng minh.
+  - Xây dựng kịch bản thuyết trình bảo vệ 3 phút, 5 phút, kịch bản demo 15 phút và cẩm nang xử lý sự cố.
+- **Bằng chứng nghiệm thu kỹ thuật:**
+  - `mvnw test-compile`: **BUILD SUCCESS**.
+  - Kiểm thử đơn vị toàn dự án: **55/55 PASS**.
+  - Hợp đồng API: **174/174 PASS**.
+  - Ranh giới module: **19 modules, 0 cycle PASS**.
+
+
 **Checkpoint 2026-10-30 — Google Antigravity, Khắc Phục Lỗi Giao Diện Creator Studio V2, Sửa Lỗi Dính Chữ & Xóa Chương, Đồng Bộ Trạng Thái Xuất Bản Công Khai và Đổi Nhãn Trang Chủ (QA Backend & Swing PASS 100%):**
 - **Agent:** Google Antigravity; ngày: 2026-10-30.
 - **Vấn đề người dùng phản ánh:**

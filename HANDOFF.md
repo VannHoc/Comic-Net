@@ -1,5 +1,37 @@
 # Bàn giao gần nhất
 
+## Phiên 2026-10-30 — Google Antigravity: Hoàn Thành Toàn Diện Kiểm Toán Lịch Sử & Xây Dựng Trọn Bộ 13 Tài Liệu Bảo Vệ Đồ Án Comic Net
+
+- **Agent:** Google Antigravity; ngày: 2026-10-30.
+- **Nhiệm vụ thực hiện:**
+  - Nghiên cứu và kiểm toán toàn bộ repository Comic Net từ thiết kế ban đầu (`prj_app.md`, `srs.md`) đến mã nguồn thực tế commit `c30c6be`.
+  - Khảo sát lịch sử Git, schema 82 bảng SQL Server qua 32 migrations, 174 endpoints OpenAPI contract, 26 màn hình/dialog Java Swing và toàn bộ hệ thống test.
+  - Xây dựng trọn bộ 13 tài liệu chuyên sâu bảo vệ đồ án tại `docs/defense/` kèm 1 bản báo cáo tổng luận toàn diện tại `docs/BAO_CAO_TOAN_DIEN_COMIC_NET.md`.
+- **Hồ sơ tài liệu đã tạo mới:**
+  1. `docs/defense/00_TONG_QUAN.md`: Tổng quan dự án, mục tiêu, vai trò actors và yêu cầu hệ thống.
+  2. `docs/defense/01_LICH_SU_THAY_DOI.md`: So sánh thiết kế gốc 23 module và 19 module hiện tại; phân tích chi tiết các tính năng đã xóa, gộp và bổ sung.
+  3. `docs/defense/02_CONG_NGHE_KIEN_TRUC.md`: Phân tích sâu toàn bộ công nghệ (Java 21, Spring Boot 4, Swing, FlatLaf, SQL Server, S3, Flyway) và sơ đồ kiến trúc Modular Monolith.
+  4. `docs/defense/03_MODULE_PACKAGE_CLASS.md`: Giải phẫu chi tiết package, phân loại module kỹ thuật vs nghiệp vụ, danh mục class chính và Spring Annotations.
+  5. `docs/defense/04_GIAO_DIEN_BUTTON.md`: Kiểm toán toàn diện 26 màn hình Java Swing; truy vết từng button đến tận Event Handler, API và SQL Server.
+  6. `docs/defense/05_DATABASE.md`: Toàn bộ schema cơ sở dữ liệu 82 bảng, phân tích khóa chính, khóa ngoại, ràng buộc, ERD và di trú Flyway V1-V32.
+  7. `docs/defense/06_LUONG_NGHIEP_VU.md`: Mô tả 20 luồng nghiệp vụ xương sống kèm sequence diagrams chuẩn Mermaid.
+  8. `docs/defense/07_BAO_MAT_PHAN_QUYEN.md`: Phân tích xác thực JWT/Cookie, ma trận RBAC, kiểm tra quyền sở hữu và giải thuật chống tấn công.
+  9. `docs/defense/08_KIEM_THU_TRIEN_KHAI.md`: Báo cáo kết quả kiểm thử (Unit, Integration, Contract, UI) và hướng dẫn cài đặt từ đầu trên máy Windows sạch.
+  10. `docs/defense/09_150_CAU_HOI_BAO_VE.md`: Bộ ngân hàng 150 câu hỏi phản biện của 3 giảng viên có kèm câu trả lời mẫu, phân tích mã nguồn và câu hỏi vặn.
+  11. `docs/defense/10_KICH_BAN_THUYET_TRINH.md`: Kịch bản thuyết trình bảo vệ 3 phút, 5 phút, kịch bản demo trực quan cho 3 nhóm vai trò và bí quyết xử lý sự cố tại chỗ.
+  12. `docs/defense/11_TU_DIEN_THUAT_NGU.md`: Từ điển tra cứu thuật ngữ chuyên ngành, chú thích Java/Spring Annotations và các ký hiệu viết tắt.
+  13. `docs/defense/12_MA_TRAN_TRUY_VET.md`: Bảng ma trận truy vết khép kín từ Yêu cầu ↔ Màn hình ↔ Button ↔ API ↔ Database ↔ Test.
+  14. `docs/BAO_CAO_TOAN_DIEN_COMIC_NET.md`: Báo cáo tổng luận hợp nhất toàn bộ kết quả kiểm toán và liên kết đến các tài liệu chuyên sâu.
+- **Bằng chứng kiểm tra mã nguồn & kiểm thử:**
+  - Biên dịch toàn bộ dự án (`mvnw test-compile`): **BUILD SUCCESS**.
+  - Kiểm thử đơn vị toàn dự án: **55/55 PASS** (Backend: 29, Desktop Swing: 26).
+  - Kiểm thử hợp đồng API: **174/174 operations PASS** (`ApiContractTest`).
+  - Kiểm thử kiến trúc ranh giới: **19 modules, 0 cycle PASS** (`ModuleBoundariesTest`).
+  - Dịch vụ đang sẵn sàng phục vụ: SQL Server (1433), Backend Spring Boot (8080), RustFS S3 (9000), Mailpit (8025).
+- **Bước kế tiếp cho sinh viên / Agent:**
+  - Sử dụng bộ tài liệu tại `docs/defense/` để ôn tập, tự luyện tập trả lời 150 câu hỏi phản biện và tiến hành diễn tập thuyết trình theo kịch bản trước khi ra hội đồng chấm đồ án.
+
+
 ## Phiên 2026-10-30 — Google Antigravity: Khắc Phục Lỗi Giao Diện Creator Studio V2
 ### Bổ sung 2026-10-30: Sửa Lỗi Truyện Đã Xuất Bản Nhưng Không Hiện Trên Trang Chủ
 - **Hiện tượng:** Truyện "Tinh giáp hồn tướng" (ID 329) trong Xưởng xuất bản đã mang nhãn `● Đã xuất bản`, nhưng khi qua tab "Trang chủ" lại chỉ thấy 3 truyện đọc thử.
