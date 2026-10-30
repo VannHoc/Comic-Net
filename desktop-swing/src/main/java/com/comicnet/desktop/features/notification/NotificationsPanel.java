@@ -59,7 +59,10 @@ public final class NotificationsPanel extends JPanel implements Workspace {
     summary.setBackground(Theme.ACTION_TINT);
     summary.setOpaque(true);
     summary.setBorder(new EmptyBorder(6, 12, 6, 12));
-    header.add(summary, BorderLayout.EAST);
+    JPanel summaryWrap = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+    summaryWrap.setOpaque(false);
+    summaryWrap.add(summary);
+    header.add(summaryWrap, BorderLayout.EAST);
     add(header, BorderLayout.NORTH);
 
     table =

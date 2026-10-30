@@ -11,6 +11,10 @@ public final class ReviewDecisionDialogs {
   private ReviewDecisionDialogs() {}
 
   public static void showRequestChanges(Window owner, String comicTitle, Consumer<String> onConfirmed) {
+    createRequestChangesDialog(owner, comicTitle, onConfirmed).setVisible(true);
+  }
+
+  public static JDialog createRequestChangesDialog(Window owner, String comicTitle, Consumer<String> onConfirmed) {
     JDialog dialog = new JDialog(owner, "Yêu cầu chỉnh sửa", Dialog.ModalityType.APPLICATION_MODAL);
     dialog.setSize(540, 430);
     dialog.setLocationRelativeTo(owner);
@@ -58,6 +62,7 @@ public final class ReviewDecisionDialogs {
 
     JTextArea reasonArea = new JTextArea(4, 30);
     reasonArea.setFont(Theme.label(13));
+    reasonArea.setText("Vui lòng kiểm tra lại thứ tự trang 7-10 của Chương 2 và ảnh bìa chất lượng quá thấp...");
     reasonArea.setLineWrap(true);
     reasonArea.setWrapStyleWord(true);
     reasonArea.setBorder(new EmptyBorder(8, 8, 8, 8));
@@ -115,10 +120,14 @@ public final class ReviewDecisionDialogs {
     footer.add(confirmBtn);
     dialog.add(footer, BorderLayout.SOUTH);
 
-    dialog.setVisible(true);
+    return dialog;
   }
 
   public static void showReject(Window owner, String comicTitle, Consumer<String> onConfirmed) {
+    createRejectDialog(owner, comicTitle, onConfirmed).setVisible(true);
+  }
+
+  public static JDialog createRejectDialog(Window owner, String comicTitle, Consumer<String> onConfirmed) {
     JDialog dialog = new JDialog(owner, "Từ chối xuất bản", Dialog.ModalityType.APPLICATION_MODAL);
     dialog.setSize(540, 430);
     dialog.setLocationRelativeTo(owner);
@@ -166,6 +175,7 @@ public final class ReviewDecisionDialogs {
 
     JTextArea reasonArea = new JTextArea(4, 30);
     reasonArea.setFont(Theme.label(13));
+    reasonArea.setText("Nội dung chưa đáp ứng tiêu chuẩn xuất bản: Truyện này không thuộc bản quyền phát hành...");
     reasonArea.setLineWrap(true);
     reasonArea.setWrapStyleWord(true);
     reasonArea.setBorder(new EmptyBorder(8, 8, 8, 8));
@@ -223,6 +233,6 @@ public final class ReviewDecisionDialogs {
     footer.add(confirmBtn);
     dialog.add(footer, BorderLayout.SOUTH);
 
-    dialog.setVisible(true);
+    return dialog;
   }
 }

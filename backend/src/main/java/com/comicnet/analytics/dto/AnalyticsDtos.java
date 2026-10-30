@@ -31,5 +31,5 @@ public final class AnalyticsDtos {
       long completions,
       BigDecimal completionRate) {}
 
-  public record RankingEntry(int rank, String comicId, String title, String coverUrl, long views) {}
+  public record RankingEntry(int rank, String comicId, String title, String coverUrl, long views, Double rating) {}
 }

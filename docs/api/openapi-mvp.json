@@ -16485,6 +16485,8 @@
           "slug",
           "type",
           "ageRating",
+          "visibility",
+          "publicationState",
           "coverUrl",
           "updatedAt",
           "rating",
@@ -16521,6 +16523,14 @@
               "16_PLUS",
               "18_PLUS"
             ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": ["PUBLIC", "HIDDEN"]
+          },
+          "publicationState": {
+            "type": "string",
+            "enum": ["DRAFT", "PENDING", "PUBLISHED", "UNPUBLISHED"]
           },
           "coverUrl": {
             "type": "string",
@@ -18940,6 +18950,11 @@
           "views": {
             "type": "integer",
             "format": "int64"
+          },
+          "rating": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         }
       },

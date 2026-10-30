@@ -136,13 +136,12 @@ public final class LibraryPanel extends JPanel implements Workspace {
     bookmarks.onSelection(this::selectBookmark);
 
     // BUILD MASTER-DETAIL COLLECTION VIEW MATCHING 02_Thu_vien.png
-    JPanel collectionView = buildMasterDetailCollectionView();
+    buildMasterDetailCollectionView();
 
     // Tabs styled with card design and icons
     JTabbedPane tabs = new JTabbedPane();
     tabs.putClientProperty("JTabbedPane.tabType", "card");
     tabs.setFont(Theme.brand(13));
-    tabs.addTab("Bộ sưu tập", UiIcons.library(15, Theme.PRIMARY), collectionView);
     tabs.addTab(
         "Theo dõi",
         UiIcons.heart(15, Theme.MUTED),
@@ -163,15 +162,6 @@ public final class LibraryPanel extends JPanel implements Workspace {
             history,
             primaryButton("Tiếp tục đọc", UiIcons.bookOpen(14, Color.WHITE), () -> resume(history.selected())),
             dangerButton("Xóa lịch sử", UiIcons.trash(14, Theme.DANGER), this::clearHistory)));
-    tabs.addTab(
-        "Bookmark",
-        UiIcons.bookmark(15, Theme.MUTED),
-        withActions(
-            bookmarks,
-            bookmarkLabel,
-            primaryButton("Mở vị trí", UiIcons.bookOpen(14, Color.WHITE), () -> resume(bookmarks.selected())),
-            button("Đổi tên", this::renameBookmark),
-            dangerButton("Xóa bookmark", UiIcons.trash(14, Theme.DANGER), this::deleteBookmark)));
     add(tabs, BorderLayout.CENTER);
 
     // Footer info bar
@@ -186,10 +176,8 @@ public final class LibraryPanel extends JPanel implements Workspace {
         e -> {
           if (api.signedIn())
             switch (tabs.getSelectedIndex()) {
-              case 0 -> loadCollectionsList();
-              case 1 -> follows.reload();
-              case 2 -> history.reload();
-              case 3 -> bookmarks.reload();
+              case 0 -> follows.reload();
+              case 1 -> history.reload();
             }
         });
   }
@@ -835,10 +823,8 @@ public final class LibraryPanel extends JPanel implements Workspace {
   }
 
   private void reloadAll() {
-    loadCollectionsList();
     follows.reload();
     history.reload();
-    bookmarks.reload();
   }
 
   private boolean available(JsonNode value) {

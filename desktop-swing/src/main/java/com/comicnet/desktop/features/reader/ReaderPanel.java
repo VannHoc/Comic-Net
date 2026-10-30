@@ -104,7 +104,7 @@ public final class ReaderPanel extends JPanel implements Workspace {
     JPanel header = new JPanel(new BorderLayout(0, 4));
     header.setOpaque(false);
     JButton backButton = button("←", back);
-    backButton.setToolTipText("Quay lại Khám phá");
+    backButton.setToolTipText("Quay lại Trang chủ");
     header.add(title, BorderLayout.NORTH);
     JButton chapters = button("Chương", this::toggleChapters);
     JButton options = button("Cài đặt", () -> settings.show(this, Math.max(0, getWidth() - 370), 54));

@@ -387,7 +387,7 @@ public final class BulkImageUploadDialog extends JDialog {
             "/publishing/versions/" + versionId + "/uploads",
             tempZip.toPath(),
             Map.of(),
-            null,
+            java.util.UUID.randomUUID().toString(),
             versionEtag);
 
         var reply = uploadFuture.get();
@@ -401,20 +401,25 @@ public final class BulkImageUploadDialog extends JDialog {
         // Poll job status
         publish(70);
         progressBar.setString("Máy chủ đang xử lý và tối ưu hóa ảnh...");
-        for (int retry = 0; retry < 60; retry++) {
+        boolean completed = false;
+        for (int retry = 0; retry < 120; retry++) {
           Thread.sleep(1000);
           var jobReply = api.get("/publishing/uploads/" + jobId).get();
           if (jobReply != null) {
             String status = jobReply.body().path("status").asText();
-            if ("COMPLETED".equals(status)) {
+            if ("SUCCEEDED".equalsIgnoreCase(status) || "COMPLETED".equalsIgnoreCase(status)) {
+              completed = true;
               publish(100);
               break;
-            } else if ("FAILED".equals(status)) {
+            } else if ("FAILED".equalsIgnoreCase(status)) {
               String err = jobReply.body().path("errorCode").asText("UPLOAD_FAILED");
               throw new IOException("Xử lý ảnh thất bại: " + err);
             }
           }
+          publish(Math.min(95, 70 + retry / 4));
         }
+
+        if (!completed) throw new IOException("Hết thời gian chờ máy chủ xử lý ảnh; kiểm tra lại trạng thái trước khi tải tiếp.");
 
         tempZip.delete();
         return null;

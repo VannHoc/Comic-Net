@@ -1,4 +1,4 @@
-package com.comicnet.desktop.features.observability;
+package com.comicnet.desktop.features.operations;
 
 import com.comicnet.desktop.client.api.*;
 import com.comicnet.desktop.features.dataprotection.BackupRestoreGuidePanel;

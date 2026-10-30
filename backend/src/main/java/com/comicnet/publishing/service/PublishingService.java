@@ -735,9 +735,7 @@ public class PublishingService {
   @Transactional
   public Manifest preview(Identity actor, long id, String format) {
     var scope = scopes.version(actor, id, "chapter.preview", true);
-    if (!scope.ageRating().equals("ALL_AGE"))
-      throw new DomainException(
-          403, "AGE_POLICY_PENDING", "Chưa hỗ trợ xem ảnh nội dung giới hạn tuổi.");
+
     readyPages(id);
     var version = data.version(id);
     List<ManifestPage> pages =

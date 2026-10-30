@@ -45,23 +45,21 @@ class CreatorAdministrationIT {
 
   @Test
   void lastAdministratorCannotBeSuspendedOrDemoted() {
-    int initial =
-        jdbc.queryForObject(
-            "SELECT COUNT(*) FROM dbo.[User] u JOIN dbo.UserRole ur ON ur.UserId=u.Id JOIN"
-                + " dbo.[Role] r ON r.Id=ur.RoleId WHERE r.Code='ADMINISTRATOR' AND"
-                + " u.Status='ACTIVE' AND u.EmailVerifiedAt IS NOT NULL",
-            Integer.class);
     Identity admin = admin();
     String token = Etags.of(accounts.version(admin.userId()));
-    if (initial > 0) {
+    int activeAfterSetup = jdbc.queryForObject(
+        "SELECT COUNT(*) FROM dbo.[User] u JOIN dbo.UserRole ur ON ur.UserId=u.Id JOIN"
+            + " dbo.[Role] r ON r.Id=ur.RoleId WHERE r.Code='ADMINISTRATOR' AND"
+            + " u.Status='ACTIVE' AND (u.Email IS NULL OR u.EmailVerifiedAt IS NOT NULL)", Integer.class);
+    if (activeAfterSetup > 1) {
       accounts.status(admin, admin.userId(), "SUSPENDED", "Test", token);
       assertThat(
               jdbc.queryForObject(
                   "SELECT COUNT(*) FROM dbo.[User] u JOIN dbo.UserRole ur ON ur.UserId=u.Id JOIN"
                       + " dbo.[Role] r ON r.Id=ur.RoleId WHERE r.Code='ADMINISTRATOR' AND"
-                      + " u.Status='ACTIVE' AND u.EmailVerifiedAt IS NOT NULL",
+                      + " u.Status='ACTIVE' AND (u.Email IS NULL OR u.EmailVerifiedAt IS NOT NULL)",
                   Integer.class))
-          .isEqualTo(initial);
+          .isEqualTo(activeAfterSetup - 1);
       return;
     }
     assertThatThrownBy(() -> accounts.status(admin, admin.userId(), "SUSPENDED", "Test", token))
@@ -70,6 +68,22 @@ class CreatorAdministrationIT {
     assertThatThrownBy(() -> accounts.roles(admin, admin.userId(), Set.of("READER"), "Test", token))
         .isInstanceOf(DomainException.class);
     assertThat(auth.roles(admin.userId())).contains("ADMINISTRATOR");
+  }
+
+  @Test
+  void usernameOnlyAccountRolesAndStatusPersistInSql() {
+    Identity administrator = admin();
+    String username = "qa" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+    auth.register(new AuthRequests.Register(null, "Test-password-42!", "QA account", username, null));
+    long id = jdbc.queryForObject("SELECT Id FROM dbo.[User] WHERE Username=?", Long.class, username);
+    accounts.roles(administrator, id, Set.of("READER", "CREATOR"), "JUnit",
+        Etags.of(accounts.version(id)));
+    assertThat(jdbc.queryForList(
+        "SELECT r.Code FROM dbo.UserRole ur JOIN dbo.[Role] r ON r.Id=ur.RoleId WHERE ur.UserId=?",
+        String.class, id)).containsExactlyInAnyOrder("READER", "CREATOR");
+    accounts.status(administrator, id, "SUSPENDED", "JUnit", Etags.of(accounts.version(id)));
+    assertThat(jdbc.queryForObject("SELECT Status FROM dbo.[User] WHERE Id=?", String.class, id))
+        .isEqualTo("SUSPENDED");
   }
 
   @Test

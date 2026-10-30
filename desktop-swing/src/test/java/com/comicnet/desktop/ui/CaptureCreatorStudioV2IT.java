@@ -64,15 +64,6 @@ public class CaptureCreatorStudioV2IT {
     var config = new DesktopConfig(URI.create(API_BASE));
     var api = new ApiClient(config, transport, session);
 
-    // If backend is healthy, sign in as admin or creator
-    boolean live = backendHealthy();
-    if (live) {
-      try {
-        // Sign in with seed user
-        api.login("admin-7b561c16-d306-4447-920f-02d992157cb7@comicnet.test", "Test-password-42!").get(5, TimeUnit.SECONDS);
-      } catch (Exception ignored) {}
-    }
-
     // 1. Capture Mockup 01: Xưởng xuất bản tổng quan (1440x880)
     AtomicReference<JFrame> frameRef = new AtomicReference<>();
     AtomicReference<PublishingPanel> pubRef = new AtomicReference<>();
@@ -91,7 +82,7 @@ public class CaptureCreatorStudioV2IT {
       pub.onShown();
     });
 
-    Thread.sleep(1200);
+    Thread.sleep(1000);
     captureWindow(frameRef.get(), "01_Xuong_xuat_ban_tong_quan.png");
 
     // 2. Capture Mockup 02: Wizard 1 - Tạo và sửa truyện
@@ -112,7 +103,7 @@ public class CaptureCreatorStudioV2IT {
       }
     });
 
-    Thread.sleep(800);
+    Thread.sleep(600);
     captureWindow(frameRef.get(), "02_Tao_va_sua_truyen.png");
 
     // 3. Capture Mockup 03: Wizard 2 - Quản lý chương
@@ -133,7 +124,7 @@ public class CaptureCreatorStudioV2IT {
       }
     });
 
-    Thread.sleep(800);
+    Thread.sleep(600);
     captureWindow(frameRef.get(), "03_Quan_ly_chuong.png");
 
     // 4. Capture Mockup 04: Upload nhiều ảnh và sắp xếp dialog
@@ -147,7 +138,6 @@ public class CaptureCreatorStudioV2IT {
           "\"etag-mock\"",
           () -> {});
 
-      // Add sample image items for visual QA
       try {
         Field itemsField = BulkImageUploadDialog.class.getDeclaredField("items");
         itemsField.setAccessible(true);
@@ -167,11 +157,12 @@ public class CaptureCreatorStudioV2IT {
         throw new RuntimeException(e);
       }
 
+      dlg.setModalityType(Dialog.ModalityType.MODELESS);
       dlg.setVisible(true);
       bulkDlgRef.set(dlg);
     });
 
-    Thread.sleep(800);
+    Thread.sleep(600);
     captureWindow(bulkDlgRef.get(), "04_Upload_nhieu_anh_va_sap_xep.png");
     SwingUtilities.invokeAndWait(() -> bulkDlgRef.get().dispose());
 
@@ -200,7 +191,7 @@ public class CaptureCreatorStudioV2IT {
       }
     });
 
-    Thread.sleep(800);
+    Thread.sleep(600);
     captureWindow(frameRef.get(), "05_Xem_truoc_va_gui_duyet_Creator.png");
 
     // 6. Capture Mockup 06: Admin Hàng chờ duyệt
@@ -216,7 +207,7 @@ public class CaptureCreatorStudioV2IT {
       frameRef.get().repaint();
     });
 
-    Thread.sleep(800);
+    Thread.sleep(600);
     captureWindow(frameRef.get(), "06_Admin_hang_cho_duyet.png");
 
     // 7. Capture Mockup 07: Admin Xem và duyệt chi tiết
@@ -232,28 +223,21 @@ public class CaptureCreatorStudioV2IT {
       }
     });
 
-    Thread.sleep(800);
+    Thread.sleep(600);
     captureWindow(frameRef.get(), "07_Admin_xem_va_duyet_chi_tiet.png");
 
     // 8. Capture Mockup 08: Admin Từ chối yêu cầu sửa (Dialog)
+    AtomicReference<JDialog> reqDlgRef = new AtomicReference<>();
     SwingUtilities.invokeAndWait(() -> {
-      new Thread(() -> {
-        try {
-          Thread.sleep(400);
-          for (Window w : Window.getWindows()) {
-            if (w instanceof JDialog d && "Yêu cầu chỉnh sửa".equals(d.getTitle())) {
-              captureWindow(d, "08_Admin_tu_choi_yeu_cau_sua.png");
-              d.dispose();
-              break;
-            }
-          }
-        } catch (Exception ignored) {}
-      }).start();
-
-      ReviewDecisionDialogs.showRequestChanges(frameRef.get(), "Người gỡ ánh sao", reason -> {});
+      JDialog d = ReviewDecisionDialogs.createRequestChangesDialog(frameRef.get(), "Người gỡ ánh sao", reason -> {});
+      d.setModalityType(Dialog.ModalityType.MODELESS);
+      d.setVisible(true);
+      reqDlgRef.set(d);
     });
 
-    Thread.sleep(1200);
+    Thread.sleep(600);
+    captureWindow(reqDlgRef.get(), "08_Admin_tu_choi_yeu_cau_sua.png");
+    SwingUtilities.invokeAndWait(() -> reqDlgRef.get().dispose());
 
     // 9. Capture Mockup 09: Creator sửa và gửi lại
     SwingUtilities.invokeAndWait(() -> {
@@ -266,7 +250,7 @@ public class CaptureCreatorStudioV2IT {
       frameRef.get().repaint();
     });
 
-    Thread.sleep(800);
+    Thread.sleep(600);
     captureWindow(frameRef.get(), "09_Creator_sua_va_gui_lai.png");
 
     // 10. Capture Mockup 10: Admin xuất bản trực tiếp
@@ -294,7 +278,7 @@ public class CaptureCreatorStudioV2IT {
       }
     });
 
-    Thread.sleep(800);
+    Thread.sleep(600);
     captureWindow(frameRef.get(), "10_Admin_xuat_ban_truc_tiep.png");
 
     // 11. Capture Mockup 11: Lịch sử phiên bản Nâng cao
@@ -306,33 +290,27 @@ public class CaptureCreatorStudioV2IT {
           "33",
           "Chương 2 — Nét mực đầu tiên",
           () -> {});
+      dlg.setModalityType(Dialog.ModalityType.MODELESS);
       dlg.setVisible(true);
       vhDlgRef.set(dlg);
     });
 
-    Thread.sleep(800);
+    Thread.sleep(600);
     captureWindow(vhDlgRef.get(), "11_Lich_su_phien_ban_Nang_cao.png");
     SwingUtilities.invokeAndWait(() -> vhDlgRef.get().dispose());
 
     // 12. Capture Mockup 12: Admin Từ chối xuất bản (Dialog)
+    AtomicReference<JDialog> rejDlgRef = new AtomicReference<>();
     SwingUtilities.invokeAndWait(() -> {
-      new Thread(() -> {
-        try {
-          Thread.sleep(400);
-          for (Window w : Window.getWindows()) {
-            if (w instanceof JDialog d && "Từ chối xuất bản".equals(d.getTitle())) {
-              captureWindow(d, "12_Admin_tu_choi_xuat_ban.png");
-              d.dispose();
-              break;
-            }
-          }
-        } catch (Exception ignored) {}
-      }).start();
-
-      ReviewDecisionDialogs.showReject(frameRef.get(), "Người gỡ ánh sao", reason -> {});
+      JDialog d = ReviewDecisionDialogs.createRejectDialog(frameRef.get(), "Người gỡ ánh sao", reason -> {});
+      d.setModalityType(Dialog.ModalityType.MODELESS);
+      d.setVisible(true);
+      rejDlgRef.set(d);
     });
 
-    Thread.sleep(1200);
+    Thread.sleep(600);
+    captureWindow(rejDlgRef.get(), "12_Admin_tu_choi_xuat_ban.png");
+    SwingUtilities.invokeAndWait(() -> rejDlgRef.get().dispose());
 
     // 13. Capture Mockup 13: Xem trước chương trước khi duyệt
     AtomicReference<ChapterPreviewDialog> prevDlgRef = new AtomicReference<>();
@@ -342,11 +320,12 @@ public class CaptureCreatorStudioV2IT {
           api,
           "mock-version-1",
           "Chương 2 — Nét mực đầu tiên");
+      dlg.setModalityType(Dialog.ModalityType.MODELESS);
       dlg.setVisible(true);
       prevDlgRef.set(dlg);
     });
 
-    Thread.sleep(800);
+    Thread.sleep(600);
     captureWindow(prevDlgRef.get(), "13_Xem_truoc_chuong_truoc_khi_duyet.png");
     SwingUtilities.invokeAndWait(() -> prevDlgRef.get().dispose());
 

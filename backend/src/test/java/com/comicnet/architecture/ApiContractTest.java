@@ -95,7 +95,7 @@ class ApiContractTest {
   void librarySerializationKeepsTheSingleStatusSourceAndRequiredNullableFields() {
     var comic =
         new ComicSummary(
-            "1", "Comic", "comic", "MANGA", "ALL_AGE", null, Instant.EPOCH, null, null);
+            "1", "Comic", "comic", "MANGA", "ALL_AGE", "PUBLIC", "PUBLISHED", null, Instant.EPOCH, null, null);
     JsonNode custom = json.valueToTree(new CollectionItem(comic, null, null, Instant.EPOCH));
     assertThat(custom.has("readingStatus")).isFalse();
     assertThat(custom.has("isFavorite")).isFalse();

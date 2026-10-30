@@ -168,7 +168,8 @@ public final class ApiClient {
                                   .header(
                                       "Content-Type",
                                       "multipart/form-data; boundary=" + body.boundary())
-                                  .header("Idempotency-Key", key);
+                                  ;
+                          if (key != null) request.header("Idempotency-Key", key);
                           if (session.accessToken() != null)
                             request.header("Authorization", "Bearer " + session.accessToken());
                           if (etag != null) request.header("If-Match", etag);
@@ -225,7 +226,7 @@ public final class ApiClient {
     if (bearer && session.accessToken() != null)
       request.header("Authorization", "Bearer " + session.accessToken());
     if (etag != null) request.header("If-Match", etag);
-    headers.forEach(request::header);
+    headers.forEach((k, v) -> { if (k != null && v != null) request.header(k, v); });
     var publisher =
         body == null
             ? HttpRequest.BodyPublishers.noBody()

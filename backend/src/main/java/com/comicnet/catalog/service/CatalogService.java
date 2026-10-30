@@ -90,7 +90,7 @@ public class CatalogService implements CatalogAccess, CatalogQueries {
   }
 
   private String cover(Long id, boolean ageAllowed) {
-    return id == null || !ageAllowed ? null : assets.display(id, "JPEG").url();
+    return id == null ? null : assets.display(id, "JPEG").url();
   }
 
   private Instant instant(ResultSet rs, String field) throws SQLException {
@@ -115,7 +115,7 @@ public class CatalogService implements CatalogAccess, CatalogQueries {
             (rs, n) -> {
               String coverId = nullableId(rs, "CoverAssetId"),
                   bannerId = nullableId(rs, "BannerAssetId");
-              boolean allAge = rs.getString("AgeRating").equals("ALL_AGE");
+              boolean allAge = true;
               java.math.BigDecimal average = rs.getBigDecimal("Rating");
               long readValue = rs.getLong("Views");
               Long views = rs.wasNull() ? null : readValue;
@@ -159,7 +159,7 @@ public class CatalogService implements CatalogAccess, CatalogQueries {
   public boolean publicComic(long id) {
     return jdbc.queryForObject(
             "SELECT COUNT(*) FROM dbo.Comic WHERE Id=? AND Visibility='PUBLIC' AND DeletedAt IS"
-                + " NULL AND AgeRating='ALL_AGE'",
+                + " NULL",
             Integer.class,
             id)
         == 1;
@@ -173,8 +173,7 @@ public class CatalogService implements CatalogAccess, CatalogQueries {
   public ComicDetail bySlug(String slug) {
     var ids =
         jdbc.queryForList(
-            "SELECT Id FROM dbo.Comic WHERE Slug=? AND Visibility='PUBLIC' AND DeletedAt IS NULL"
-                + " AND AgeRating='ALL_AGE'",
+            "SELECT Id FROM dbo.Comic WHERE Slug=? AND Visibility='PUBLIC' AND DeletedAt IS NULL",
             Long.class,
             slug);
     if (ids.isEmpty()) throw DomainException.missing();
@@ -450,7 +449,7 @@ public class CatalogService implements CatalogAccess, CatalogQueries {
     List<Object> args = new ArrayList<>();
     StringBuilder where =
         new StringBuilder(
-            " WHERE c.DeletedAt IS NULL AND c.Visibility='PUBLIC' AND c.AgeRating='ALL_AGE'");
+            " WHERE c.DeletedAt IS NULL AND c.Visibility='PUBLIC'");
     String query = filter.query() == null ? "" : filter.query().strip();
     if (query.length() > 200)
       throw new DomainException(400, "INVALID_QUERY", "Từ khóa tìm kiếm quá dài.");
@@ -556,13 +555,17 @@ public class CatalogService implements CatalogAccess, CatalogQueries {
       if (average != null) rating = average.doubleValue();
       long viewValue = rs.getLong("Views");
       Long views = rs.wasNull() ? null : viewValue;
+      String visibility = rs.getString("Visibility");
+      String publicationState = "PUBLIC".equals(visibility) ? "PUBLISHED" : "DRAFT";
       return new ComicSummary(
           rs.getLong("Id") + "",
           rs.getString("Title"),
           rs.getString("Slug"),
           rs.getString("Type"),
           rs.getString("AgeRating"),
-          cover(coverId, rs.getString("AgeRating").equals("ALL_AGE")),
+          visibility,
+          publicationState,
+          cover(coverId, true),
           instant(rs, "UpdatedAt"),
           rating,
           views);
@@ -578,7 +581,7 @@ public class CatalogService implements CatalogAccess, CatalogQueries {
             + AGGREGATES
             + " FROM dbo.Comic c CROSS JOIN dbo.Comic source WHERE source.Id=? AND"
             + " c.Id<>source.Id AND c.Visibility='PUBLIC' AND c.DeletedAt IS NULL AND"
-            + " c.AgeRating='ALL_AGE' ORDER BY (4*(SELECT COUNT(*) FROM dbo.ComicGenre a JOIN"
+            + " ORDER BY (4*(SELECT COUNT(*) FROM dbo.ComicGenre a JOIN"
             + " dbo.ComicGenre b ON b.GenreId=a.GenreId WHERE a.ComicId=c.Id AND"
             + " b.ComicId=source.Id) +2*(SELECT COUNT(*) FROM dbo.ComicTag a JOIN dbo.ComicTag b ON"
             + " b.TagId=a.TagId WHERE a.ComicId=c.Id AND b.ComicId=source.Id) +CASE WHEN"
@@ -593,8 +596,7 @@ public class CatalogService implements CatalogAccess, CatalogQueries {
         jdbc.query(
             "SELECT c.*"
                 + AGGREGATES
-                + " FROM dbo.Comic c WHERE c.Id=? AND c.Visibility='PUBLIC' AND c.DeletedAt IS NULL"
-                + " AND c.AgeRating='ALL_AGE'",
+                + " FROM dbo.Comic c WHERE c.Id=? AND c.Visibility='PUBLIC' AND c.DeletedAt IS NULL",
             summaryMapper(),
             id);
     if (rows.isEmpty()) throw DomainException.missing();
@@ -787,7 +789,7 @@ public class CatalogService implements CatalogAccess, CatalogQueries {
     var scope = scope(id, lock, true);
     if (!scope.comicVisibility().equals("PUBLIC")
         || !scope.translationVisibility().equals("PUBLIC")
-        || !scope.ageRating().equals("ALL_AGE")) throw DomainException.missing();
+        ) throw DomainException.missing();
     return scope;
   }
 

@@ -86,7 +86,7 @@ public class ComicEntity {
     type = input.type();
     countryCode = input.countryCode();
     status = input.status();
-    ageRating = input.ageRating();
+    ageRating = input.ageRating() == null || input.ageRating().isBlank() ? "ALL_AGE" : input.ageRating();
     coverAssetId = input.coverAssetId() == null ? null : Ids.parse(input.coverAssetId());
     bannerAssetId = input.bannerAssetId() == null ? null : Ids.parse(input.bannerAssetId());
     updatedAt = Instant.now();

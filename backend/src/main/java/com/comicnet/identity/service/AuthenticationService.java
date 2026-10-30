@@ -103,6 +103,7 @@ public class AuthenticationService implements IdentityService {
     jdbc.update(
         "INSERT dbo.UserRole(UserId,RoleId) SELECT ?,Id FROM dbo.[Role] WHERE Code='READER'",
         user.getId());
+    welcome(user.getId());
     if (email != null) action(user, "VERIFY_EMAIL");
     audit.record(user.getId(), "ACCOUNT_REGISTERED", "User", user.getId().toString(), "SUCCESS");
   }
@@ -278,6 +279,7 @@ public class AuthenticationService implements IdentityService {
     if (!"ACTIVE".equals(user.getStatus())
         || (user.getEmail() != null && user.getEmailVerifiedAt() == null))
       throw DomainException.unauthorized();
+    welcome(user.getId());
     Instant now = Instant.now(), expires = now.plusSeconds(30L * 86400);
     Long sessionId =
         jdbc.queryForObject(
@@ -297,6 +299,16 @@ public class AuthenticationService implements IdentityService {
     String access = jwt.issue(user.getId(), sessionId, user.getAuthVersion());
     audit.record(user.getId(), "LOGIN", "Session", sessionId.toString(), "SUCCESS");
     return new SessionResult(access, refresh, user(user.getId()));
+  }
+
+  private void welcome(long userId) {
+    jdbc.update(
+        "INSERT dbo.Notification(UserId,Type,Title,Body,LinkType,LinkId,DedupKey)"
+            + " SELECT ?,'SYSTEM_ANNOUNCEMENT',N'Chào mừng bạn đến với Comic Net',"
+            + " N'Chúc bạn có những trải nghiệm đọc truyện thú vị!',NULL,NULL,'welcome:v1'"
+            + " WHERE NOT EXISTS(SELECT 1 FROM dbo.Notification WITH (UPDLOCK,HOLDLOCK)"
+            + " WHERE UserId=? AND Type='SYSTEM_ANNOUNCEMENT' AND DedupKey='welcome:v1')",
+        userId, userId);
   }
 
   @Transactional(noRollbackFor = RefreshReplay.class)

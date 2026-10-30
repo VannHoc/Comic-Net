@@ -8,9 +8,13 @@ import com.comicnet.desktop.ui.Workspace;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.function.Consumer;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import tools.jackson.databind.JsonNode;
 
 public final class PublishingPanel extends JPanel implements Workspace {
@@ -29,8 +33,9 @@ public final class PublishingPanel extends JPanel implements Workspace {
 
   private final JPanel cardsGrid = new JPanel();
   private final JTextField searchField = new JTextField(18);
-  private final JComboBox<String> filterCombo = new JComboBox<>(new String[] {"Trạng thái: Tất cả", "Bản nháp", "Chờ duyệt", "Đã xuất bản"});
+  private final JComboBox<String> filterCombo = new JComboBox<>(new String[] {"Trạng thái: Tất cả", "Bản nháp", "Chờ duyệt", "Đã xuất bản", "Đã gỡ xuất bản"});
   private final List<JsonNode> allComics = new ArrayList<>();
+  private final Map<String, String> comicVisibility = new HashMap<>();
   private String currentFilter = "ALL";
 
   // Wizard and Feedback sub-panels
@@ -73,7 +78,8 @@ public final class PublishingPanel extends JPanel implements Workspace {
 
   // ==================== DASHBOARD VIEW (Mockup 01) ====================
   private void buildDashboard() {
-    dashboardView.setOpaque(false);
+    dashboardView.setOpaque(true);
+    dashboardView.setBackground(Theme.BACKGROUND);
 
     // Top Header: Title & "+ Tạo truyện" button
     JPanel topHeader = new JPanel(new BorderLayout(0, 6));
@@ -110,30 +116,26 @@ public final class PublishingPanel extends JPanel implements Workspace {
       wizard.startNewComic();
       rootLayout.show(rootHost, "WIZARD");
     });
-    topHeader.add(createComicBtn, BorderLayout.EAST);
+    JPanel createWrap = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+    createWrap.setOpaque(false);
+    createWrap.add(createComicBtn);
+    topHeader.add(createWrap, BorderLayout.EAST);
 
     // 3 KPI Stat Cards (Mockup 01)
     JPanel kpiRow = new JPanel(new GridLayout(1, 3, 16, 0));
     kpiRow.setOpaque(false);
-    kpiRow.setPreferredSize(new Dimension(0, 78));
+    kpiRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 78));
+    kpiRow.setPreferredSize(new Dimension(600, 78));
 
     kpiRow.add(buildKpiCard(kpiTotal, "Truyện đang quản lý", Theme.PRIMARY));
     kpiRow.add(buildKpiCard(kpiDraft, "Bản nháp / cần sửa", new Color(0xD9, 0x77, 0x06)));
     kpiRow.add(buildKpiCard(kpiPending, "Đang chờ Admin duyệt", new Color(0x25, 0x63, 0xEB)));
 
-    JPanel topSection = new JPanel(new BorderLayout(0, 16));
-    topSection.setOpaque(false);
-    topSection.add(topHeader, BorderLayout.NORTH);
-    topSection.add(kpiRow, BorderLayout.SOUTH);
-    dashboardView.add(topSection, BorderLayout.NORTH);
-
-    // Center Section: Filter toolbar + Grid of comic cards
-    JPanel centerSection = new JPanel(new BorderLayout(0, 14));
-    centerSection.setOpaque(false);
-
     // Filter toolbar
     JPanel filterBar = new JPanel(new BorderLayout(14, 0));
     filterBar.setOpaque(false);
+    filterBar.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+    filterBar.setPreferredSize(new Dimension(600, 38));
 
     // Left filter pills
     JPanel pillsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
@@ -142,6 +144,7 @@ public final class PublishingPanel extends JPanel implements Workspace {
     pillsPanel.add(buildFilterPill("Bản nháp", "DRAFT"));
     pillsPanel.add(buildFilterPill("Chờ duyệt", "PENDING"));
     pillsPanel.add(buildFilterPill("Đã xuất bản", "PUBLISHED"));
+    pillsPanel.add(buildFilterPill("Đã gỡ xuất bản", "UNPUBLISHED"));
     filterBar.add(pillsPanel, BorderLayout.WEST);
 
     // Right search & sort
@@ -162,24 +165,65 @@ public final class PublishingPanel extends JPanel implements Workspace {
 
     filterCombo.setFont(Theme.label(12));
     filterCombo.setBackground(Theme.SURFACE);
-    filterCombo.addActionListener(e -> filterAndRenderCards());
+    filterCombo.addActionListener(e -> {
+      currentFilter = switch (filterCombo.getSelectedIndex()) {
+        case 1 -> "DRAFT";
+        case 2 -> "PENDING";
+        case 3 -> "PUBLISHED";
+        case 4 -> "UNPUBLISHED";
+        default -> "ALL";
+      };
+      filterAndRenderCards();
+    });
+    searchField.getDocument().addDocumentListener(new DocumentListener() {
+      @Override public void insertUpdate(DocumentEvent e) { filterAndRenderCards(); }
+      @Override public void removeUpdate(DocumentEvent e) { filterAndRenderCards(); }
+      @Override public void changedUpdate(DocumentEvent e) { filterAndRenderCards(); }
+    });
     searchBox.add(filterCombo);
 
     filterBar.add(searchBox, BorderLayout.EAST);
-    centerSection.add(filterBar, BorderLayout.NORTH);
 
-    // Cards Grid (2 columns) inside JScrollPane
-    cardsGrid.setOpaque(false);
+    // Top Section combines topHeader + kpiRow + filterBar cleanly with Y_AXIS layout
+    JPanel topSection = new JPanel();
+    topSection.setLayout(new BoxLayout(topSection, BoxLayout.Y_AXIS));
+    topSection.setOpaque(true);
+    topSection.setBackground(Theme.BACKGROUND);
+    topSection.setBorder(new EmptyBorder(0, 0, 14, 0));
+
+    topHeader.setAlignmentX(Component.LEFT_ALIGNMENT);
+    topSection.add(topHeader);
+    topSection.add(Box.createVerticalStrut(14));
+
+    kpiRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+    topSection.add(kpiRow);
+    topSection.add(Box.createVerticalStrut(16));
+
+    filterBar.setAlignmentX(Component.LEFT_ALIGNMENT);
+    topSection.add(filterBar);
+
+    dashboardView.add(topSection, BorderLayout.NORTH);
+
+    // Cards Grid (2 columns) inside JScrollPane with wrapper to avoid vertical stretching and artifacts
+    cardsGrid.setOpaque(true);
+    cardsGrid.setBackground(Theme.BACKGROUND);
     cardsGrid.setLayout(new GridLayout(0, 2, 16, 16));
 
-    JScrollPane scroll = new JScrollPane(cardsGrid);
-    scroll.setBorder(null);
-    scroll.setOpaque(false);
-    scroll.getViewport().setOpaque(false);
-    scroll.getVerticalScrollBar().setUnitIncrement(24);
-    centerSection.add(scroll, BorderLayout.CENTER);
+    JPanel cardsWrapper = new JPanel(new BorderLayout());
+    cardsWrapper.setOpaque(true);
+    cardsWrapper.setBackground(Theme.BACKGROUND);
+    cardsWrapper.add(cardsGrid, BorderLayout.NORTH);
 
-    dashboardView.add(centerSection, BorderLayout.CENTER);
+    JScrollPane scroll = new JScrollPane(cardsWrapper);
+    scroll.setBorder(null);
+    scroll.setOpaque(true);
+    scroll.setBackground(Theme.BACKGROUND);
+    scroll.getViewport().setOpaque(true);
+    scroll.getViewport().setBackground(Theme.BACKGROUND);
+    scroll.getVerticalScrollBar().setUnitIncrement(24);
+    scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+    dashboardView.add(scroll, BorderLayout.CENTER);
   }
 
   private JPanel buildKpiCard(JLabel valueLabel, String title, Color accent) {
@@ -218,8 +262,13 @@ public final class PublishingPanel extends JPanel implements Workspace {
     pill.setFocusPainted(false);
     pill.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     pill.addActionListener(e -> {
-      this.currentFilter = code;
-      filterAndRenderCards();
+      filterCombo.setSelectedIndex(switch (code) {
+        case "DRAFT" -> 1;
+        case "PENDING" -> 2;
+        case "PUBLISHED" -> 3;
+        case "UNPUBLISHED" -> 4;
+        default -> 0;
+      });
     });
     return pill;
   }
@@ -233,7 +282,11 @@ public final class PublishingPanel extends JPanel implements Workspace {
           String r = role.asText().toUpperCase(java.util.Locale.ROOT);
           if ("ADMINISTRATOR".equals(r) || "ADMIN".equals(r)) isAdmin = true;
         }
-        this.administrator = isAdmin;
+        boolean adminRole = isAdmin;
+        SwingUtilities.invokeLater(() -> {
+          this.administrator = adminRole;
+          wizard.setAdministrator(adminRole);
+        });
       }
     });
 
@@ -241,14 +294,28 @@ public final class PublishingPanel extends JPanel implements Workspace {
       SwingUtilities.invokeLater(() -> {
         if (err != null || reply == null) return;
         allComics.clear();
+        comicVisibility.clear();
         JsonNode items = reply.body().path("items");
         if (items.isArray()) {
           for (JsonNode item : items) {
             allComics.add(item);
+            String visibility = item.path("visibility").asText("");
+            if (!visibility.isBlank()) comicVisibility.put(item.path("id").asText(), visibility);
           }
         }
         kpiTotal.setText(String.format("%02d", allComics.size()));
         filterAndRenderCards();
+        for (JsonNode item : allComics) {
+          String id = item.path("id").asText();
+          if (comicVisibility.containsKey(id)) continue;
+          api.get("/publishing/comics/" + id).whenComplete((detail, detailError) ->
+              SwingUtilities.invokeLater(() -> {
+                if (detail != null && detailError == null) {
+                  comicVisibility.put(id, detail.body().path("visibility").asText("HIDDEN"));
+                  filterAndRenderCards();
+                }
+              }));
+        }
       });
     });
   }
@@ -265,24 +332,23 @@ public final class PublishingPanel extends JPanel implements Workspace {
       String desc = comic.path("description").asText("Chưa có mô tả.");
       String comicId = comic.path("id").asText();
 
-      // Simple mock-status categorization for visual alignment
-      String status = "DRAFT";
-      if (comic.has("publishedAt") && !comic.path("publishedAt").isNull()) {
-        status = "PUBLISHED";
-      } else {
-        draftCount++;
-      }
+      String visibility = comicVisibility.get(comicId);
+      String status = comic.path("publicationState").asText("");
+      if (status.isBlank()) status = "PUBLIC".equals(visibility) ? "PUBLISHED" : "UNKNOWN";
+      if ("DRAFT".equals(status)) draftCount++;
+      if ("PENDING".equals(status)) pendingCount++;
 
       boolean match = true;
-      if ("DRAFT".equals(currentFilter) && !"DRAFT".equals(status)) match = false;
-      if ("PUBLISHED".equals(currentFilter) && !"PUBLISHED".equals(status)) match = false;
+      if (!"ALL".equals(currentFilter) && !currentFilter.equals(status)) match = false;
+      if (!title.toLowerCase(java.util.Locale.ROOT)
+          .contains(searchField.getText().strip().toLowerCase(java.util.Locale.ROOT))) match = false;
 
       if (match) {
         cardsGrid.add(buildComicCard(comicId, title, type, desc, status));
       }
     }
 
-    kpiDraft.setText(String.format("%02d", Math.max(draftCount, 1)));
+    kpiDraft.setText(String.format("%02d", draftCount));
     kpiPending.setText(String.format("%02d", pendingCount));
 
     if (cardsGrid.getComponentCount() == 0) {
@@ -381,7 +447,7 @@ public final class PublishingPanel extends JPanel implements Workspace {
       // Find default translation and first chapter to show version history
       api.get("/publishing/comics/" + comicId + "/translations").whenComplete((tReply, tErr) -> {
         if (tReply != null && tErr == null) {
-          JsonNode trans = tReply.body();
+          JsonNode trans = tReply.body().path("items");
           if (trans.isArray() && !trans.isEmpty()) {
             String transId = trans.get(0).path("id").asText();
             api.get("/publishing/translations/" + transId + "/chapters?page=0&size=10").whenComplete((cReply, cErr) -> {
@@ -411,6 +477,12 @@ public final class PublishingPanel extends JPanel implements Workspace {
 
     popup.add(itemEdit);
     popup.add(itemHistory);
+    if (administrator) {
+      boolean isPub = "PUBLIC".equalsIgnoreCase(comicVisibility.get(comicId)) || "PUBLISHED".equals(status);
+      JMenuItem visibilityAction = new JMenuItem(isPub ? "Gỡ xuất bản (Tạm ẩn)" : "✓ Công khai lên Trang chủ (Xuất bản)");
+      visibilityAction.addActionListener(e -> changeVisibility(comicId, isPub));
+      popup.add(visibilityAction);
+    }
     moreBtn.addActionListener(e -> popup.show(moreBtn, 0, moreBtn.getHeight()));
     actionRow.add(moreBtn);
 
@@ -431,11 +503,67 @@ public final class PublishingPanel extends JPanel implements Workspace {
     } else if ("PENDING".equals(status)) {
       pill.setText("● Chờ duyệt");
       pill.setForeground(new Color(0x25, 0x63, 0xEB));
+    } else if ("UNPUBLISHED".equals(status)) {
+      pill.setText("● Đã gỡ xuất bản");
+      pill.setForeground(Theme.MUTED);
+    } else if ("UNKNOWN".equals(status)) {
+      pill.setText("● Chưa tải trạng thái");
+      pill.setForeground(Theme.MUTED);
     } else {
       pill.setText("● Bản nháp");
       pill.setForeground(Theme.MUTED);
     }
     return pill;
+  }
+
+  private void changeVisibility(String comicId, boolean hide) {
+    String reason = JOptionPane.showInputDialog(this,
+        hide ? "Lý do gỡ xuất bản:" : "Lý do tái xuất bản:",
+        hide ? "Gỡ xuất bản" : "Tái xuất bản", JOptionPane.QUESTION_MESSAGE);
+    if (reason == null) return;
+    if (reason.isBlank()) {
+      JOptionPane.showMessageDialog(this, "Cần nhập lý do thao tác.", "Thiếu lý do", JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+    api.get("/publishing/comics/" + comicId)
+        .thenCompose(current -> {
+          if (!hide) {
+            return api.request("PATCH", "/comics/" + comicId, Map.of("ageRating", "ALL_AGE"), current.etag())
+                .thenCompose(patched -> api.request("PUT", "/admin/comics/" + comicId + "/visibility",
+                    Map.of("visibility", "PUBLIC", "reason", reason.trim()), patched.etag()));
+          }
+          return api.request("PUT", "/admin/comics/" + comicId + "/visibility",
+              Map.of("visibility", "HIDDEN", "reason", reason.trim()), current.etag());
+        })
+        .whenComplete((reply, err) -> SwingUtilities.invokeLater(() -> {
+          if (err != null || reply == null) {
+            Throwable cause = err == null ? new IllegalStateException("Máy chủ không trả lời") : ApiClient.unwrap(err);
+            String detail = cause instanceof ApiClient.ApiFailure failure
+                ? "HTTP " + failure.status() + " · " + failure.code() + " · " + failure.getMessage()
+                    + " · Mã yêu cầu: " + failure.requestId()
+                : String.valueOf(cause.getMessage());
+            JOptionPane.showMessageDialog(this, "Không thể đổi trạng thái: " + detail, "Lỗi", JOptionPane.ERROR_MESSAGE);
+          } else {
+            // Also synchronize translation visibility
+            api.get("/publishing/comics/" + comicId + "/translations").whenComplete((tReply, tErr) -> {
+              if (tReply != null && tErr == null) {
+                JsonNode trans = tReply.body().path("items");
+                if (trans.isArray()) {
+                  for (JsonNode t : trans) {
+                    String trId = t.path("id").asText();
+                    api.get("/publishing/translations/" + trId).whenComplete((trDetail, trErr) -> {
+                      if (trDetail != null) {
+                        api.request("PATCH", "/translations/" + trId, Map.of("visibility", hide ? "HIDDEN" : "PUBLIC"), trDetail.etag());
+                      }
+                    });
+                  }
+                }
+              }
+            });
+            JOptionPane.showMessageDialog(this, hide ? "Đã tạm ẩn truyện khỏi Trang chủ." : "Đã công khai truyện lên Trang chủ thành công!", "Thành công", JOptionPane.INFORMATION_MESSAGE);
+            loadDashboardData();
+          }
+        }));
   }
 
   @Override

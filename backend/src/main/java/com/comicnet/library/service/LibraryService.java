@@ -24,7 +24,7 @@ public class LibraryService implements ComicAudience {
   private final ReadingAnchors anchors;
   private final Idempotency idempotency;
   private static final String PUBLIC =
-      " c.Visibility='PUBLIC' AND c.DeletedAt IS NULL AND c.AgeRating='ALL_AGE'";
+      " c.Visibility='PUBLIC' AND c.DeletedAt IS NULL";
 
   public LibraryService(
       JdbcTemplate jdbc,

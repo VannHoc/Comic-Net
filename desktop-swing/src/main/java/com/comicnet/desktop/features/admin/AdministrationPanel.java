@@ -12,6 +12,7 @@ import java.util.function.*;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import tools.jackson.databind.JsonNode;
 
 /** Administrator provisioning screens share the same REST contracts as future clients. */
@@ -21,7 +22,7 @@ public final class AdministrationPanel extends JPanel implements Workspace {
   private final JLabel message = new JLabel("Chọn Tải lại để kiểm tra quyền quản trị.");
   private final DefaultTableModel users =
       new DefaultTableModel(
-          new Object[] {"ID", "Tên hiển thị", "Email", "Trạng thái", "Vai trò"}, 0) {
+          new Object[] {"ID", "Tên đăng nhập", "Email", "Trạng thái", "Vai trò"}, 0) {
         public boolean isCellEditable(int r, int c) {
           return false;
         }
@@ -33,6 +34,10 @@ public final class AdministrationPanel extends JPanel implements Workspace {
         }
       };
   private final JTable userTable = new JTable(users), teamTable = new JTable(teams);
+  private final TableRowSorter<DefaultTableModel> userSorter = new TableRowSorter<>(users);
+  private final JComboBox<String> roleFilter = new JComboBox<>(new String[] {"Mọi vai trò", "READER", "CREATOR", "ADMINISTRATOR"});
+  private final JComboBox<String> statusFilter = new JComboBox<>(new String[] {"Mọi trạng thái", "ACTIVE", "SUSPENDED"});
+  private final JLabel userStats = new JLabel("Tổng: 0  ·  Hoạt động: 0  ·  Bị khóa: 0");
   private final JTextField query = new JTextField(),
       teamName = new JTextField(),
       slug = new JTextField();
@@ -67,7 +72,7 @@ public final class AdministrationPanel extends JPanel implements Workspace {
     JLabel eyebrow = Theme.plainLabel("QUẢN TRỊ NỀN TẢNG");
     eyebrow.setForeground(Theme.PRIMARY);
     eyebrow.setFont(Theme.heading(11));
-    JLabel title = new JLabel("Quản trị hệ thống");
+    JLabel title = new JLabel("Quản lý tài khoản");
     title.setFont(Theme.heading(28));
     title.setForeground(Theme.TEXT);
     JLabel sub = Theme.plainLabel("Phân quyền tài khoản, quản lý nhóm dịch và thiết lập membership.");
@@ -86,7 +91,11 @@ public final class AdministrationPanel extends JPanel implements Workspace {
       else message.setText("Đăng nhập bằng tài khoản quản trị viên.");
     });
     reloadBtn.setIcon(UiIcons.refresh(14, Theme.TEXT));
-    heading.add(reloadBtn, BorderLayout.EAST);
+    reloadBtn.setPreferredSize(new Dimension(108, 34));
+    JPanel reloadWrap = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+    reloadWrap.setOpaque(false);
+    reloadWrap.add(reloadBtn);
+    heading.add(reloadWrap, BorderLayout.EAST);
     add(heading, BorderLayout.NORTH);
 
     JTabbedPane tabs = new JTabbedPane();
@@ -95,12 +104,14 @@ public final class AdministrationPanel extends JPanel implements Workspace {
     tabs.addTab("Tài khoản", UiIcons.user(14, Theme.MUTED), userView());
     tabs.addTab("Nhóm dịch", UiIcons.shield(14, Theme.MUTED), teamView());
     tabs.addTab("Membership", UiIcons.settings(14, Theme.MUTED), memberView());
+    add(tabs, BorderLayout.CENTER);
     add(message, BorderLayout.SOUTH);
     tabs.addChangeListener(
         e -> {
           if (tabs.getSelectedIndex() == 1) loadTeams();
         });
     userTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    userTable.setRowSorter(userSorter);
     userTable.setRowHeight(34);
     teamTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     teamTable.setRowHeight(34);
@@ -115,7 +126,7 @@ public final class AdministrationPanel extends JPanel implements Workspace {
         .addListSelectionListener(
             e -> {
               if (!e.getValueIsAdjusting() && userTable.getSelectedRow() >= 0)
-                loadUser(users.getValueAt(userTable.getSelectedRow(), 0).toString());
+                loadUser(users.getValueAt(userTable.convertRowIndexToModel(userTable.getSelectedRow()), 0).toString());
             });
     memberUser.addActionListener(e -> invalidateMembership());
     memberTeam.addActionListener(e -> invalidateMembership());
@@ -185,16 +196,19 @@ public final class AdministrationPanel extends JPanel implements Workspace {
 
   private JPanel userView() {
     JPanel view = new JPanel(new BorderLayout(0, 12));
+    roleFilter.addActionListener(e -> applyUserFilter());
+    statusFilter.addActionListener(e -> applyUserFilter());
     query.setColumns(24);
     query.addActionListener(
         e -> {
           userPage = 0;
           loadUsers();
         });
-    view.add(
-        row(
+    JPanel toolbar = row(
             new JLabel("Tìm email/tên"),
             query,
+            roleFilter,
+            statusFilter,
             button(
                 "Tìm",
                 () -> {
@@ -212,14 +226,17 @@ public final class AdministrationPanel extends JPanel implements Workspace {
                 () -> {
                   userPage++;
                   loadUsers();
-                })),
-        BorderLayout.NORTH);
+                }));
+    JPanel top = new JPanel(new BorderLayout(0, 4));
+    top.add(toolbar, BorderLayout.NORTH);
+    top.add(userStats, BorderLayout.SOUTH);
+    view.add(top, BorderLayout.NORTH);
     JPanel edit = grid();
     edit.add(selectedUser);
     edit.add(new JLabel("Thay đổi quyền và trạng thái tài khoản"));
     fields(edit, "Trạng thái", status);
     JPanel checks = new JPanel(new GridLayout(0, 2, 10, 6));
-    for (String role : List.of("READER", "CREATOR", "MODERATOR", "ADMINISTRATOR")) {
+    for (String role : List.of("READER", "CREATOR", "ADMINISTRATOR")) {
       JCheckBox check = new JCheckBox(role);
       systemRoles.put(role, check);
       checks.add(check);
@@ -290,6 +307,7 @@ public final class AdministrationPanel extends JPanel implements Workspace {
 
   private void loadUsers() {
     if (tasks.busy()) return;
+    long selectedId = userId;
     tasks.run(
         this,
         message,
@@ -304,11 +322,14 @@ public final class AdministrationPanel extends JPanel implements Workspace {
           memberUser.removeAllItems();
           userId = 0;
           userEtag = null;
+          selectedUser.setText("Chọn một tài khoản");
+          status.setSelectedItem("ACTIVE");
+          systemRoles.values().forEach(check -> check.setSelected(false));
           for (JsonNode user : reply.body().path("items")) {
             users.addRow(
                 new Object[] {
                   user.path("id").asText(),
-                  user.path("displayName").asText(),
+                  user.path("username").asText(),
                   user.path("email").asText(),
                   user.path("status").asText(),
                   user.path("roles").toString()
@@ -333,7 +354,34 @@ public final class AdministrationPanel extends JPanel implements Workspace {
                       + " · "
                       + reply.body().path("page").path("totalElements").asLong()
                       + " tài khoản");
+          long active = 0, suspended = 0;
+          for (int i = 0; i < users.getRowCount(); i++) {
+            if ("ACTIVE".equals(users.getValueAt(i, 3))) active++;
+            if ("SUSPENDED".equals(users.getValueAt(i, 3))) suspended++;
+          }
+          userStats.setText("Tổng: " + reply.body().path("page").path("totalElements").asLong()
+              + "  ·  Hoạt động trên trang: " + active + "  ·  Bị khóa trên trang: " + suspended);
+          applyUserFilter();
+          if (selectedId > 0) SwingUtilities.invokeLater(() -> {
+            for (int modelRow = 0; modelRow < users.getRowCount(); modelRow++) {
+              if (!Long.toString(selectedId).equals(users.getValueAt(modelRow, 0))) continue;
+              int viewRow = userTable.convertRowIndexToView(modelRow);
+              if (viewRow >= 0) userTable.setRowSelectionInterval(viewRow, viewRow);
+              break;
+            }
+          });
         });
+  }
+
+  private void applyUserFilter() {
+    String role = (String) roleFilter.getSelectedItem();
+    String state = (String) statusFilter.getSelectedItem();
+    userSorter.setRowFilter(new RowFilter<>() {
+      @Override public boolean include(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
+        return ("Mọi vai trò".equals(role) || entry.getStringValue(4).contains("\"" + role + "\""))
+            && ("Mọi trạng thái".equals(state) || state.equals(entry.getStringValue(3)));
+      }
+    });
   }
 
   private void loadUser(String id) {
@@ -371,7 +419,13 @@ public final class AdministrationPanel extends JPanel implements Workspace {
             "PUT", "/admin/users/" + userId + (roles ? "/roles" : "/status"), value, userEtag),
         reply -> {
           userEtag = reply.etag();
-          message.setText("Đã lưu. Tải lại danh sách để xem dữ liệu mới.");
+          loadUsers();
+        },
+        error -> {
+          Throwable cause = ApiClient.unwrap(error);
+          message.setText(cause instanceof ApiClient.ApiFailure failure
+              ? "Không thể lưu: HTTP " + failure.status() + " · " + failure.code() + " · " + failure.getMessage()
+              : "Không thể lưu: " + cause.getMessage());
         });
   }
 

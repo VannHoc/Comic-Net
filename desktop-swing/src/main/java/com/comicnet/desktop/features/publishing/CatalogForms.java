@@ -49,17 +49,12 @@ final class CatalogForms {
     var status =
         EditDialog.options(
             text(value, "status", "ONGOING"), "ONGOING", "COMPLETED", "HIATUS", "DROPPED");
-    var age =
-        EditDialog.options(
-            text(value, "ageRating", "ALL_AGE"), "ALL_AGE", "13_PLUS", "16_PLUS", "18_PLUS");
     form.field("Tên truyện", title);
     form.field("Slug", slug);
     form.field("Mô tả", new JScrollPane(description));
     form.field("Loại", type);
     form.field("Quốc gia (ISO 2 ký tự)", country);
     form.field("Trạng thái", status);
-    form.field("Phân loại tuổi", age);
-    form.full(Theme.plainLabel("Nội dung 13+/16+/18+ tạm chặn đọc theo chính sách đã chốt."));
     form.field("Tên khác (mỗi dòng một tên)", new JScrollPane(aliases));
     Map<String, JList<Option>> selectors = new LinkedHashMap<>();
     Map<String, String> kinds = new LinkedHashMap<>();
@@ -141,7 +136,7 @@ final class CatalogForms {
           body.put("type", type.getSelectedItem());
           body.put("countryCode", country.getText().strip().toUpperCase(Locale.ROOT));
           body.put("status", status.getSelectedItem());
-          body.put("ageRating", age.getSelectedItem());
+          body.put("ageRating", "ALL_AGE");
           body.put(
               "alternativeTitles",
               aliases.getText().lines().map(String::strip).filter(s -> !s.isEmpty()).toList());

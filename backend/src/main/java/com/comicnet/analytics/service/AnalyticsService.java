@@ -247,7 +247,8 @@ public class AnalyticsService {
                 comic.id(),
                 comic.title(),
                 comic.coverUrl(),
-                row.getValue()));
+                row.getValue(),
+                comic.rating()));
       } catch (DomainException unavailable) {
         if (unavailable.status() != 404) throw unavailable;
       }

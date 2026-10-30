@@ -17,7 +17,7 @@ import tools.jackson.databind.JsonNode;
 
 public final class ComicEditorWizard extends JPanel {
   private final ApiClient api;
-  private final boolean administrator;
+  private boolean administrator;
   private final Runnable onCompleteOrCancel;
 
   private final CardLayout wizardLayout = new CardLayout();
@@ -108,6 +108,15 @@ public final class ComicEditorWizard extends JPanel {
     stepHost.add(step3View, "STEP3");
 
     add(stepHost, BorderLayout.CENTER);
+  }
+
+  public void setAdministrator(boolean administrator) {
+    if (this.administrator == administrator) return;
+    this.administrator = administrator;
+    step3View.removeAll();
+    buildStep3();
+    step3View.revalidate();
+    step3View.repaint();
   }
 
   private JPanel buildWizardHeader(int activeStep, String stepTitle, String stepDesc) {
@@ -381,12 +390,26 @@ public final class ComicEditorWizard extends JPanel {
       body.put("title", title);
       body.put("type", type);
       body.put("description", desc);
-      body.put("tags", tags);
+      String slugBase = title.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+      body.put("slug", (slugBase.isEmpty() ? "comic" : slugBase) + "-" + UUID.randomUUID().toString().substring(0, 8));
+      body.put("countryCode", "VN");
+      body.put("status", "ONGOING");
       body.put("ageRating", "ALL_AGE");
-      if (!alt.isBlank()) body.put("alternativeTitles", List.of(alt));
-      if (!author.isBlank()) body.put("authors", List.of(author));
+      body.put("alternativeTitles", alt.isBlank() ? List.of() : List.of(alt));
+      body.put("genreIds", List.of());
+      body.put("tagIds", List.of());
+      body.put("warningIds", List.of());
+      body.put("contributors", List.of());
+      body.put("publisherIds", List.of());
 
-      api.request("POST", "/publishing/comics", body, null).whenComplete((reply, err) -> {
+      var cover = selectedCoverFile == null
+          ? java.util.concurrent.CompletableFuture.<ApiClient.Reply>completedFuture(null)
+          : api.upload("/assets", selectedCoverFile.toPath(), Map.of("kind", "COVER"), UUID.randomUUID().toString(), null);
+      cover.thenCompose(asset -> {
+        body.put("coverAssetId", asset == null ? null : asset.body().path("id").asText());
+        body.put("bannerAssetId", null);
+        return api.create("/comics", body, UUID.randomUUID().toString());
+      }).whenComplete((reply, err) -> {
         SwingUtilities.invokeLater(() -> {
           if (err != null || reply == null) {
             JOptionPane.showMessageDialog(this, "Không thể lưu thông tin truyện: " + (reply != null ? reply.body() : err), "Lỗi", JOptionPane.ERROR_MESSAGE);
@@ -399,25 +422,64 @@ public final class ComicEditorWizard extends JPanel {
         });
       });
     } else {
-      if (advanceToStep2) {
-        loadChaptersForStep2();
-        wizardLayout.show(stepHost, "STEP2");
-      } else {
-        JOptionPane.showMessageDialog(this, "Đã lưu bản nháp thông tin truyện!", "Thành công", JOptionPane.INFORMATION_MESSAGE);
-      }
+      var cover = selectedCoverFile == null
+          ? java.util.concurrent.CompletableFuture.<ApiClient.Reply>completedFuture(null)
+          : api.upload("/assets", selectedCoverFile.toPath(), Map.of("kind", "COVER"), UUID.randomUUID().toString(), null);
+      cover.thenCompose(asset -> api.get("/publishing/comics/" + comicId).thenCompose(current -> {
+        var patch = new HashMap<String, Object>();
+        patch.put("title", title);
+        patch.put("description", desc);
+        patch.put("type", type);
+        patch.put("ageRating", "ALL_AGE");
+        if (asset != null) patch.put("coverAssetId", asset.body().path("id").asText());
+        return api.request("PATCH", "/comics/" + comicId, patch, current.etag());
+      })).whenComplete((reply, err) -> SwingUtilities.invokeLater(() -> {
+        if (err != null || reply == null) {
+          JOptionPane.showMessageDialog(this, "Không thể lưu thông tin truyện: " + err, "Lỗi", JOptionPane.ERROR_MESSAGE);
+          return;
+        }
+        selectedCoverFile = null;
+        if (advanceToStep2) {
+          loadChaptersForStep2();
+          wizardLayout.show(stepHost, "STEP2");
+        } else {
+          JOptionPane.showMessageDialog(this, "Đã lưu bản nháp thông tin truyện!", "Thành công", JOptionPane.INFORMATION_MESSAGE);
+        }
+      }));
     }
   }
 
   private void createDefaultTranslation(boolean advanceToStep2) {
-    var transBody = Map.of(
-        "languageTag", "vi",
-        "editionKey", "default-edition");
+    api.get(administrator ? "/admin/teams?page=0&size=50" : "/me/teams?page=0&size=50")
+        .whenComplete((teamsReply, teamsError) -> SwingUtilities.invokeLater(() -> {
+      if (teamsError != null || teamsReply == null) {
+        JOptionPane.showMessageDialog(this, "Không thể tải nhóm sở hữu: " + teamsError, "Lỗi", JOptionPane.ERROR_MESSAGE);
+        return;
+      }
+      JsonNode teamItems = teamsReply.body().path("items");
+      if (!teamItems.isArray() || teamItems.isEmpty()) {
+        JOptionPane.showMessageDialog(this, "Cần có nhóm dịch để tạo bản dịch và chương.", "Thiếu nhóm", JOptionPane.WARNING_MESSAGE);
+        return;
+      }
+      String[] labels = new String[teamItems.size()];
+      for (int i = 0; i < teamItems.size(); i++) labels[i] = teamItems.get(i).path("name").asText() + " (#" + teamItems.get(i).path("id").asText() + ")";
+      String selected = (String) JOptionPane.showInputDialog(this, "Chọn nhóm sở hữu bản dịch:", "Nhóm dịch",
+          JOptionPane.QUESTION_MESSAGE, null, labels, labels[0]);
+      if (selected == null) return;
+      int teamIndex = java.util.Arrays.asList(labels).indexOf(selected);
+      var transBody = new HashMap<String, Object>();
+      transBody.put("teamId", teamItems.get(teamIndex).path("id").asText());
+      transBody.put("languageTag", "vi");
+      transBody.put("editionKey", "default-edition");
+      transBody.put("titleOverride", null);
 
-    api.request("POST", "/publishing/comics/" + comicId + "/translations", transBody, null).whenComplete((tReply, tErr) -> {
+    api.create("/comics/" + comicId + "/translations", transBody, UUID.randomUUID().toString()).whenComplete((tReply, tErr) -> {
       SwingUtilities.invokeLater(() -> {
-        if (tReply != null && tErr == null) {
-          this.translationId = tReply.body().path("id").asText();
+        if (tReply == null || tErr != null) {
+          JOptionPane.showMessageDialog(this, "Không thể tạo bản dịch: " + tErr, "Lỗi", JOptionPane.ERROR_MESSAGE);
+          return;
         }
+        this.translationId = tReply.body().path("id").asText();
         if (advanceToStep2) {
           loadChaptersForStep2();
           wizardLayout.show(stepHost, "STEP2");
@@ -426,6 +488,7 @@ public final class ComicEditorWizard extends JPanel {
         }
       });
     });
+    }));
   }
 
   // ==================== STEP 2: CHAPTERS (Mockup 03) ====================
@@ -444,13 +507,22 @@ public final class ComicEditorWizard extends JPanel {
         BorderFactory.createLineBorder(Theme.BORDER, 1, true),
         new EmptyBorder(14, 14, 14, 14)));
 
-    JPanel masterTop = new JPanel(new BorderLayout());
+    JPanel masterTop = new JPanel();
+    masterTop.setLayout(new BoxLayout(masterTop, BoxLayout.Y_AXIS));
     masterTop.setOpaque(false);
 
     JLabel masterTitle = new JLabel("Danh sách chương");
     masterTitle.setFont(Theme.heading(15));
     masterTitle.setForeground(Theme.TEXT);
-    masterTop.add(masterTitle, BorderLayout.WEST);
+    masterTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+    masterTop.add(masterTitle);
+    masterTop.add(Box.createVerticalStrut(8));
+
+    JPanel masterBtns = new JPanel(new GridLayout(1, 2, 8, 0));
+    masterBtns.setOpaque(false);
+    masterBtns.setAlignmentX(Component.LEFT_ALIGNMENT);
+    masterBtns.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+    masterBtns.setPreferredSize(new Dimension(252, 32));
 
     JButton addChapterBtn = new JButton("+ Thêm");
     addChapterBtn.setFont(Theme.heading(12));
@@ -459,7 +531,19 @@ public final class ComicEditorWizard extends JPanel {
     addChapterBtn.setFocusPainted(false);
     addChapterBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     addChapterBtn.addActionListener(e -> createNewChapter());
-    masterTop.add(addChapterBtn, BorderLayout.EAST);
+
+    JButton delChapterBtn = new JButton("🗑 Xóa");
+    delChapterBtn.setFont(Theme.label(12));
+    delChapterBtn.setBackground(Theme.SURFACE);
+    delChapterBtn.setForeground(new Color(0xDC, 0x26, 0x26));
+    delChapterBtn.setFocusPainted(false);
+    delChapterBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    delChapterBtn.setToolTipText("Xóa chương đang chọn");
+    delChapterBtn.addActionListener(e -> deleteCurrentChapter());
+
+    masterBtns.add(addChapterBtn);
+    masterBtns.add(delChapterBtn);
+    masterTop.add(masterBtns);
     masterCol.add(masterTop, BorderLayout.NORTH);
 
     chapterJList.setFont(Theme.label(13));
@@ -559,11 +643,28 @@ public final class ComicEditorWizard extends JPanel {
     detailCol.add(Box.createVerticalStrut(14));
 
     // Pages preview strip
+    JPanel pagesHeader = new JPanel(new BorderLayout());
+    pagesHeader.setOpaque(false);
+    pagesHeader.setAlignmentX(Component.LEFT_ALIGNMENT);
+    pagesHeader.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+    pagesHeader.setPreferredSize(new Dimension(500, 32));
+
     JLabel pagesTitle = new JLabel("Trang ảnh trong chương:");
     pagesTitle.setFont(Theme.heading(13));
     pagesTitle.setForeground(Theme.TEXT);
-    pagesTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-    detailCol.add(pagesTitle);
+    pagesHeader.add(pagesTitle, BorderLayout.WEST);
+
+    JButton clearPagesBtn = new JButton("🗑 Xóa tất cả trang");
+    clearPagesBtn.setFont(Theme.label(12));
+    clearPagesBtn.setForeground(new Color(0xDC, 0x26, 0x26));
+    clearPagesBtn.setBackground(Theme.SURFACE);
+    clearPagesBtn.setFocusPainted(false);
+    clearPagesBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    clearPagesBtn.setToolTipText("Xóa toàn bộ trang ảnh đã tải của chương này");
+    clearPagesBtn.addActionListener(e -> removeAllPages());
+    pagesHeader.add(clearPagesBtn, BorderLayout.EAST);
+
+    detailCol.add(pagesHeader);
     detailCol.add(Box.createVerticalStrut(6));
 
     pageThumbnailsPanel.setOpaque(false);
@@ -600,11 +701,10 @@ public final class ComicEditorWizard extends JPanel {
     nextStepBtn.setForeground(Color.WHITE);
     nextStepBtn.setFocusPainted(false);
     nextStepBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-    nextStepBtn.addActionListener(e -> {
-      saveCurrentChapter();
+    nextStepBtn.addActionListener(e -> saveCurrentChapter(() -> {
       prepareStep3();
       wizardLayout.show(stepHost, "STEP3");
-    });
+    }));
 
     actions.add(saveDraftBtn);
     actions.add(nextStepBtn);
@@ -638,20 +738,31 @@ public final class ComicEditorWizard extends JPanel {
   }
 
   private void createNewChapter() {
-    int nextNum = chapterListModel.size() + 1;
+    if (translationId == null) {
+      JOptionPane.showMessageDialog(this, "Lưu thông tin truyện trước khi thêm chương.", "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+    int nextNum = 1;
+    for (int i = 0; i < chapterListModel.size(); i++) {
+      try { nextNum = Math.max(nextNum, Integer.parseInt(chapterListModel.get(i).number) + 1); }
+      catch (NumberFormatException ignored) { /* Backend validates nonnumeric sort orders. */ }
+    }
+    final int chapterNumber = nextNum;
     var body = Map.of(
-        "displayNumber", String.valueOf(nextNum),
-        "title", "Chương " + nextNum,
-        "sortOrder", String.valueOf(nextNum),
+        "displayNumber", String.valueOf(chapterNumber),
+        "title", "Chương " + chapterNumber,
+        "sortOrder", String.valueOf(chapterNumber),
         "accessPolicy", "FREE");
 
-    api.request("POST", "/translations/" + translationId + "/chapters", body, null).whenComplete((reply, err) -> {
+    api.create("/translations/" + translationId + "/chapters", body, UUID.randomUUID().toString()).whenComplete((reply, err) -> {
       SwingUtilities.invokeLater(() -> {
         if (reply != null && err == null) {
           String chId = reply.body().path("id").asText();
-          ChapterItem item = new ChapterItem(chId, "Chương " + nextNum, String.valueOf(nextNum), "FREE");
+          ChapterItem item = new ChapterItem(chId, "Chương " + chapterNumber, String.valueOf(chapterNumber), "FREE");
           chapterListModel.addElement(item);
           chapterJList.setSelectedValue(item, true);
+        } else {
+          JOptionPane.showMessageDialog(this, "Không thể tạo chương: " + err, "Lỗi", JOptionPane.ERROR_MESSAGE);
         }
       });
     });
@@ -668,7 +779,7 @@ public final class ComicEditorWizard extends JPanel {
     api.get("/publishing/chapters/" + item.id + "/versions").whenComplete((reply, err) -> {
       SwingUtilities.invokeLater(() -> {
         if (reply != null && err == null) {
-          JsonNode versions = reply.body();
+          JsonNode versions = reply.body().path("items");
           JsonNode draftVersion = null;
           for (JsonNode v : versions) {
             String state = v.path("state").asText();
@@ -692,7 +803,7 @@ public final class ComicEditorWizard extends JPanel {
   }
 
   private void createDraftVersion(ChapterItem item) {
-    api.request("POST", "/publishing/chapters/" + item.id + "/versions", Map.of(), null).whenComplete((reply, err) -> {
+    api.create("/chapters/" + item.id + "/versions", Map.of(), UUID.randomUUID().toString()).whenComplete((reply, err) -> {
       SwingUtilities.invokeLater(() -> {
         if (reply != null && err == null) {
           this.activeVersionId = reply.body().path("id").asText();
@@ -716,11 +827,32 @@ public final class ComicEditorWizard extends JPanel {
           for (JsonNode p : pages) {
             currentVersionPages.add(p);
             int pos = p.path("position").asInt(1);
-            JLabel pageBadge = new JLabel("Trang " + pos);
-            pageBadge.setFont(Theme.heading(12));
+            String pageId = p.path("pageId").asText();
+
+            JPanel pageBadge = new JPanel(new BorderLayout(4, 0));
+            pageBadge.setOpaque(true);
+            pageBadge.setBackground(new Color(0xF8, 0xFA, 0xFC));
             pageBadge.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(Theme.PRIMARY, 1, true),
-                new EmptyBorder(4, 8, 4, 8)));
+                new EmptyBorder(3, 8, 3, 5)));
+
+            JLabel posLabel = new JLabel("Trang " + pos);
+            posLabel.setFont(Theme.heading(12));
+            posLabel.setForeground(Theme.TEXT);
+            pageBadge.add(posLabel, BorderLayout.CENTER);
+
+            JButton delBtn = new JButton("×");
+            delBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
+            delBtn.setForeground(new Color(0xDC, 0x26, 0x26));
+            delBtn.setContentAreaFilled(false);
+            delBtn.setBorderPainted(false);
+            delBtn.setFocusPainted(false);
+            delBtn.setMargin(new Insets(0, 2, 0, 0));
+            delBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            delBtn.setToolTipText("Xóa trang này");
+            delBtn.addActionListener(e -> removeSinglePage(versionId, pageId, item));
+            pageBadge.add(delBtn, BorderLayout.EAST);
+
             pageThumbnailsPanel.add(pageBadge);
           }
         }
@@ -749,20 +881,53 @@ public final class ComicEditorWizard extends JPanel {
   }
 
   private void saveCurrentChapter() {
-    ChapterItem sel = chapterJList.getSelectedValue();
-    if (sel == null) return;
+    saveCurrentChapter(null);
+  }
 
-    sel.title = chapterTitleField.getText().trim();
-    sel.number = chapterNumField.getText().trim();
-    sel.policy = freeRadio.isSelected() ? "FREE" : "RESTRICTED";
-    chapterJList.repaint();
+  private void saveCurrentChapter(Runnable afterSave) {
+    ChapterItem sel = chapterJList.getSelectedValue();
+    if (sel == null) {
+      JOptionPane.showMessageDialog(this, "Chưa có chương để lưu.", "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+
+    String title = chapterTitleField.getText().trim();
+    String number = chapterNumField.getText().trim();
+    if (title.isEmpty() || number.isEmpty()) {
+      JOptionPane.showMessageDialog(this, "Nhập tên và số thứ tự chương.", "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+    if (!number.matches("[0-9]{1,8}(\\.[0-9]{1,4})?")) {
+      JOptionPane.showMessageDialog(this, "Số thứ tự chương phải là số dương hợp lệ.", "Dữ liệu không hợp lệ", JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+    for (int i = 0; i < chapterListModel.size(); i++) {
+      ChapterItem other = chapterListModel.get(i);
+      if (other != sel && number.equals(other.number)) {
+        JOptionPane.showMessageDialog(this, "Số thứ tự chương đã tồn tại.", "Trùng chương", JOptionPane.WARNING_MESSAGE);
+        return;
+      }
+    }
 
     var body = Map.of(
-        "title", sel.title,
-        "displayNumber", sel.number,
-        "accessPolicy", sel.policy);
+        "title", title,
+        "displayNumber", number,
+        "sortOrder", number,
+        "accessPolicy", freeRadio.isSelected() ? "FREE" : "RESTRICTED");
 
-    api.request("PATCH", "/chapters/" + sel.id, body, "");
+    api.get("/publishing/chapters/" + sel.id).thenCompose(current ->
+        api.request("PATCH", "/chapters/" + sel.id, body, current.etag()))
+        .whenComplete((reply, err) -> SwingUtilities.invokeLater(() -> {
+          if (err != null || reply == null) {
+            JOptionPane.showMessageDialog(this, "Không thể lưu chương: " + err, "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+          }
+          sel.title = title;
+          sel.number = number;
+          sel.policy = freeRadio.isSelected() ? "FREE" : "RESTRICTED";
+          chapterJList.repaint();
+          if (afterSave != null) afterSave.run();
+        }));
   }
 
   // ==================== STEP 3: REVIEW / PUBLISH (Mockup 05 / 10) ====================
@@ -1064,33 +1229,77 @@ public final class ComicEditorWizard extends JPanel {
   }
 
   private void doAdminDirectPublish() {
-    if (activeChapterId == null || activeVersionId == null) {
-      JOptionPane.showMessageDialog(this, "Chưa có chương hoặc bản nháp để xuất bản.", "Thông báo", JOptionPane.WARNING_MESSAGE);
+    if (comicId == null || chapterListModel.isEmpty()) {
+      JOptionPane.showMessageDialog(this, "Chưa có thông tin truyện hoặc chương để xuất bản.", "Thông báo", JOptionPane.WARNING_MESSAGE);
       return;
     }
 
     int conf = JOptionPane.showConfirmDialog(
         this,
-        "Quyền Administrator: Xuất bản trực tiếp chương truyện này lên Comic Net ngay bây giờ?",
+        "Quyền Administrator: Xuất bản và công khai truyện này lên Trang chủ Comic Net ngay bây giờ?",
         "Xác nhận xuất bản trực tiếp",
         JOptionPane.YES_NO_OPTION);
     if (conf != JOptionPane.YES_OPTION) return;
 
-    // Direct publish call
-    api.get("/publishing/chapters/" + activeChapterId).whenComplete((cReply, cErr) -> {
-      String chEtag = cReply != null ? cReply.etag() : "";
-      var pubBody = Map.of("versionId", activeVersionId);
+    // 1. Publish all chapters that have a version
+    List<ChapterItem> toPublish = new ArrayList<>();
+    for (int i = 0; i < chapterListModel.size(); i++) {
+      ChapterItem it = chapterListModel.get(i);
+      if (it.versionId != null) toPublish.add(it);
+    }
 
-      api.request("POST", "/publishing/chapters/" + activeChapterId + "/publish", pubBody, chEtag)
-          .whenComplete((reply, err) -> {
-            SwingUtilities.invokeLater(() -> {
-              if (err != null || reply == null) {
-                JOptionPane.showMessageDialog(this, "Xuất bản thất bại: " + (reply != null ? reply.body() : err), "Lỗi", JOptionPane.ERROR_MESSAGE);
-              } else {
-                JOptionPane.showMessageDialog(this, "Đã xuất bản truyện trực tiếp thành công!", "Thành công", JOptionPane.INFORMATION_MESSAGE);
-                onCompleteOrCancel.run();
-              }
+    if (toPublish.isEmpty() && activeChapterId != null && activeVersionId != null) {
+      ChapterItem active = chapterJList.getSelectedValue();
+      if (active != null) {
+        active.versionId = activeVersionId;
+        toPublish.add(active);
+      }
+    }
+
+    publishChaptersSequentially(toPublish, 0, () -> {
+      // 2. Set Comic.Visibility = 'PUBLIC' via PUT /admin/comics/{comicId}/visibility
+      api.get("/publishing/comics/" + comicId).whenComplete((cReply, cErr) -> {
+        String cEtag = cReply != null ? cReply.etag() : "";
+        api.request("PATCH", "/comics/" + comicId, Map.of("ageRating", "ALL_AGE"), cEtag).whenComplete((pReply, pErr) -> {
+          String latestEtag = pReply != null ? pReply.etag() : cEtag;
+          var visBody = Map.of("visibility", "PUBLIC", "reason", "Admin direct published");
+          api.request("PUT", "/admin/comics/" + comicId + "/visibility", visBody, latestEtag, Map.of()).whenComplete((vReply, vErr) -> {
+          // 3. Set Translation.Visibility = 'PUBLIC' via PATCH /translations/{translationId}
+          if (translationId != null) {
+            api.get("/publishing/translations/" + translationId).whenComplete((tReply, tErr) -> {
+              String tEtag = tReply != null ? tReply.etag() : "";
+              api.request("PATCH", "/translations/" + translationId, Map.of("visibility", "PUBLIC"), tEtag, Map.of())
+                  .whenComplete((trReply, trErr) -> {
+                    SwingUtilities.invokeLater(() -> {
+                      JOptionPane.showMessageDialog(this, "Đã xuất bản và công khai truyện lên Trang chủ thành công!", "Xuất bản thành công", JOptionPane.INFORMATION_MESSAGE);
+                      onCompleteOrCancel.run();
+                    });
+                  });
             });
+          } else {
+            SwingUtilities.invokeLater(() -> {
+              JOptionPane.showMessageDialog(this, "Đã xuất bản và công khai truyện lên Trang chủ thành công!", "Xuất bản thành công", JOptionPane.INFORMATION_MESSAGE);
+              onCompleteOrCancel.run();
+            });
+          }
+        });
+        });
+      });
+    });
+  }
+
+  private void publishChaptersSequentially(List<ChapterItem> list, int index, Runnable onFinished) {
+    if (index >= list.size()) {
+      onFinished.run();
+      return;
+    }
+    ChapterItem it = list.get(index);
+    api.get("/publishing/chapters/" + it.id).whenComplete((chReply, chErr) -> {
+      String etag = chReply != null ? chReply.etag() : "";
+      var body = Map.of("versionId", it.versionId);
+      api.request("POST", "/publishing/chapters/" + it.id + "/publish", body, etag, Map.of())
+          .whenComplete((pReply, pErr) -> {
+            publishChaptersSequentially(list, index + 1, onFinished);
           });
     });
   }
@@ -1117,7 +1326,7 @@ public final class ComicEditorWizard extends JPanel {
     // Fetch translations
     api.get("/publishing/comics/" + comicId + "/translations").whenComplete((reply, err) -> {
       if (reply != null && err == null) {
-        JsonNode trans = reply.body();
+        JsonNode trans = reply.body().path("items");
         if (trans.isArray() && !trans.isEmpty()) {
           this.translationId = trans.get(0).path("id").asText();
         }
@@ -1132,5 +1341,90 @@ public final class ComicEditorWizard extends JPanel {
     this.translationId = translationId;
     loadChaptersForStep2();
     wizardLayout.show(stepHost, "STEP2");
+  }
+
+  private void removeSinglePage(String versionId, String pageId, ChapterItem item) {
+    if (activeVersionEtag == null) return;
+    int confirm = JOptionPane.showConfirmDialog(this,
+        "Bạn có chắc muốn xóa trang ảnh này không?",
+        "Xác nhận xóa trang",
+        JOptionPane.YES_NO_OPTION,
+        JOptionPane.QUESTION_MESSAGE);
+    if (confirm != JOptionPane.YES_OPTION) return;
+
+    api.request("DELETE", "/publishing/versions/" + versionId + "/pages/" + pageId, null, activeVersionEtag, Map.of())
+        .whenComplete((reply, err) -> {
+          SwingUtilities.invokeLater(() -> {
+            if (err != null) {
+              Throwable cause = ApiClient.unwrap(err);
+              JOptionPane.showMessageDialog(this, "Không thể xóa trang: " + cause.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+            } else {
+              loadVersionPages(versionId, item);
+            }
+          });
+        });
+  }
+
+  private void removeAllPages() {
+    if (activeVersionId == null || currentVersionPages.isEmpty()) {
+      JOptionPane.showMessageDialog(this, "Chương hiện chưa có trang ảnh nào để xóa.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+    ChapterItem sel = chapterJList.getSelectedValue();
+    if (sel == null) return;
+
+    int confirm = JOptionPane.showConfirmDialog(this,
+        "Bạn có chắc chắn muốn xóa toàn bộ " + currentVersionPages.size() + " trang ảnh trong chương này không?",
+        "Xác nhận xóa tất cả trang",
+        JOptionPane.YES_NO_OPTION,
+        JOptionPane.WARNING_MESSAGE);
+    if (confirm != JOptionPane.YES_OPTION) return;
+
+    deletePagesSequentially(activeVersionId, new java.util.ArrayList<>(currentVersionPages), 0, sel);
+  }
+
+  private void deletePagesSequentially(String versionId, java.util.List<JsonNode> pagesToDelete, int index, ChapterItem item) {
+    if (index >= pagesToDelete.size()) {
+      loadVersionPages(versionId, item);
+      JOptionPane.showMessageDialog(this, "Đã xóa toàn bộ trang ảnh của chương.", "Thành công", JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+    String pageId = pagesToDelete.get(index).path("pageId").asText();
+    api.request("DELETE", "/publishing/versions/" + versionId + "/pages/" + pageId, null, activeVersionEtag, Map.of())
+        .whenComplete((reply, err) -> {
+          SwingUtilities.invokeLater(() -> {
+            if (err == null && reply != null) {
+              this.activeVersionEtag = reply.etag();
+              deletePagesSequentially(versionId, pagesToDelete, index + 1, item);
+            } else {
+              loadVersionPages(versionId, item);
+              Throwable cause = err != null ? ApiClient.unwrap(err) : new Exception("Lỗi xóa trang");
+              JOptionPane.showMessageDialog(this, "Đã xóa " + index + " trang. Lỗi ở trang tiếp theo: " + cause.getMessage(), "Thông báo", JOptionPane.WARNING_MESSAGE);
+            }
+          });
+        });
+  }
+
+  private void deleteCurrentChapter() {
+    ChapterItem sel = chapterJList.getSelectedValue();
+    if (sel == null) return;
+    if (chapterListModel.size() <= 1) {
+      JOptionPane.showMessageDialog(this, "Truyện cần tối thiểu 1 chương.", "Không thể xóa", JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+    int confirm = JOptionPane.showConfirmDialog(this,
+        "Bạn có chắc chắn muốn xóa chương \"" + sel.title + "\" khỏi danh sách không?",
+        "Xác nhận xóa chương",
+        JOptionPane.YES_NO_OPTION,
+        JOptionPane.WARNING_MESSAGE);
+    if (confirm != JOptionPane.YES_OPTION) return;
+
+    int index = chapterJList.getSelectedIndex();
+    chapterListModel.removeElement(sel);
+    int newIndex = Math.min(index, chapterListModel.size() - 1);
+    if (newIndex >= 0) {
+      chapterJList.setSelectedIndex(newIndex);
+    }
+    JOptionPane.showMessageDialog(this, "Đã xóa chương \"" + sel.title + "\" thành công.", "Thành công", JOptionPane.INFORMATION_MESSAGE);
   }
 }

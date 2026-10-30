@@ -83,7 +83,7 @@ public class RedesignUiLiveIT {
     // 1. Guest Explore View
     SwingUtilities.invokeAndWait(() -> {
       try {
-        showWorkspaceMethod.invoke(frame, "Khám phá");
+        showWorkspaceMethod.invoke(frame, "Trang chủ");
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
@@ -128,7 +128,7 @@ public class RedesignUiLiveIT {
     // 4. Authenticated Explore View (1440x880)
     SwingUtilities.invokeAndWait(() -> {
       try {
-        showWorkspaceMethod.invoke(frame, "Khám phá");
+        showWorkspaceMethod.invoke(frame, "Trang chủ");
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
@@ -218,7 +218,7 @@ public class RedesignUiLiveIT {
     SwingUtilities.invokeAndWait(() -> {
       try {
         frame.setSize(1267, 795);
-        showWorkspaceMethod.invoke(frame, "Khám phá");
+        showWorkspaceMethod.invoke(frame, "Trang chủ");
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
@@ -237,7 +237,7 @@ public class RedesignUiLiveIT {
     SwingUtilities.invokeAndWait(() -> {
       try {
         frame.setSize(1180, 720);
-        showWorkspaceMethod.invoke(frame, "Khám phá");
+        showWorkspaceMethod.invoke(frame, "Trang chủ");
       } catch (Exception e) {
         throw new RuntimeException(e);
       }

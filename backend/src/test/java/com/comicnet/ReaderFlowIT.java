@@ -529,9 +529,8 @@ class ReaderFlowIT {
         c.comic(),
         json.readTree("{\"ageRating\":\"18_PLUS\"}"),
         Etags.of(catalog.version(c.comic())));
-    assertThat(reader.access(null, c.chapter()).allowed()).isFalse();
-    assertThatThrownBy(() -> reader.manifest(null, c.chapter(), "JPEG"))
-        .isInstanceOf(DomainException.class);
+    assertThat(reader.access(null, c.chapter()).allowed()).isTrue();
+    assertThat(reader.manifest(null, c.chapter(), "JPEG").pages()).isNotEmpty();
   }
 
   @Test

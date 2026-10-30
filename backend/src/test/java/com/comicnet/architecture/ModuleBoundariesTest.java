@@ -35,28 +35,6 @@ class ModuleBoundariesTest {
           Map.entry("notification", Set.of("identity", "library", "observability")),
           Map.entry("gamification", Set.of("identity", "wallet", "entitlement", "observability")),
           Map.entry(
-              "minigame",
-              Set.of(
-                  "identity",
-                  "gamification",
-                  "wallet",
-                  "entitlement",
-                  "monetization",
-                  "observability")),
-          Map.entry(
-              "ai",
-              Set.of(
-                  "publishing",
-                  "storage",
-                  "community",
-                  "search",
-                  "recommendation",
-                  "observability")),
-          Map.entry(
-              "offline",
-              Set.of("identity", "reader", "publishing", "storage", "entitlement", "observability")),
-          Map.entry("dataprotection", Set.of("identity", "storage", "observability")),
-          Map.entry(
               "admin",
               Set.of(
                   "identity",
@@ -66,8 +44,7 @@ class ModuleBoundariesTest {
                   "community",
                   "monetization",
                   "finance",
-                  "observability",
-                  "dataprotection")));
+                  "observability")));
 
   @Test
   void modulesUseApprovedPublicApisWithoutReverseDependencies() throws Exception {
@@ -93,8 +70,8 @@ class ModuleBoundariesTest {
   }
 
   @Test
-  void approvedGraphHasAllTwentyThreeModulesAndNoCycle() {
-    assertThat(DEPENDENCIES).hasSize(23);
+  void approvedGraphHasOnlyRealModulesAndNoCycle() {
+    assertThat(DEPENDENCIES).hasSize(19);
     Set<String> complete = new HashSet<>();
     for (String module : DEPENDENCIES.keySet()) visit(module, new HashSet<>(), complete);
   }

@@ -12,7 +12,7 @@ import com.comicnet.desktop.features.wallet.WalletPanel;
 import com.comicnet.desktop.features.wallet.AdminWalletPanel;
 import com.comicnet.desktop.features.gamification.GamificationPanel;
 import com.comicnet.desktop.features.notification.NotificationsPanel;
-import com.comicnet.desktop.features.observability.OperationsPanel;
+import com.comicnet.desktop.features.operations.OperationsPanel;
 import com.comicnet.desktop.features.publishing.AdminReviewQueuePanel;
 import com.comicnet.desktop.features.publishing.PublishingPanel;
 import com.comicnet.desktop.features.reader.*;
@@ -135,16 +135,16 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
     setContentPane(root);
 
     // Workspaces
-    reader = new ReaderPanel(api, media, this::read, () -> showWorkspace("Khám phá"));
+    reader = new ReaderPanel(api, media, this::read, () -> showWorkspace("Trang chủ"));
     catalog = new CatalogPanel(api, media, this::read);
-    addWorkspace("Khám phá", catalog, UiIcons.home(18, Theme.MUTED));
+    addWorkspace("Trang chủ", catalog, UiIcons.home(18, Theme.MUTED));
     addWorkspace("Đang đọc", reader, UiIcons.bookOpen(18, Theme.MUTED));
     addWorkspace(
         "Thư viện",
         new LibraryPanel(
             api,
             id -> {
-              showWorkspace("Khám phá");
+              showWorkspace("Trang chủ");
               catalog.openComic(id);
             },
             this::read,
@@ -161,7 +161,7 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
         new RankingPanel(
             api,
             id -> {
-              showWorkspace("Khám phá");
+              showWorkspace("Trang chủ");
               catalog.openComic(id);
             }),
         UiIcons.barChart(18, Theme.MUTED));
@@ -201,7 +201,7 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
     addWorkspace("Hệ thống", systemPanel(config), UiIcons.settings(18, Theme.MUTED));
 
     refreshRoleNavigation();
-    showWorkspace("Khám phá");
+    showWorkspace("Trang chủ");
     sessionSubscription =
         api.onSessionChanged(() -> SwingUtilities.invokeLater(this::sessionChanged));
     updateTopBarUser();
@@ -240,7 +240,7 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
     globalSearch.putClientProperty("JTextField.placeholderText", "Tìm kiếm truyện, tác giả, thể loại...");
     globalSearch.setToolTipText("Tìm truyện, tác giả hoặc thể loại...");
     globalSearch.addActionListener(e -> {
-      showWorkspace("Khám phá");
+      showWorkspace("Trang chủ");
       catalog.search(globalSearch.getText());
     });
 
@@ -366,7 +366,8 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
     navigation.revalidate();
   }
 
-  private void showWorkspace(String title) {
+  private void showWorkspace(String rawTitle) {
+    final String title = "Khám phá".equals(rawTitle) ? "Trang chủ" : rawTitle;
     if (active != null && workspaces.containsKey(active)) workspaces.get(active).onHidden();
     active = title;
     cards.show(content, title);
@@ -430,7 +431,7 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
     if (!api.signedIn()) {
       if ("Xưởng xuất bản".equals(active) || "Xuất bản".equals(active) || "Duyệt nội dung".equals(active)
           || "Quản trị".equals(active) || "Quản lý ví xu".equals(active)
-          || "Vận hành".equals(active) || "Hệ thống".equals(active)) showWorkspace("Khám phá");
+          || "Vận hành".equals(active) || "Hệ thống".equals(active)) showWorkspace("Trang chủ");
       return;
     }
     api.get("/me").whenComplete((reply, error) -> SwingUtilities.invokeLater(() -> {

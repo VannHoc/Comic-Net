@@ -27,6 +27,7 @@ public final class CatalogPanel extends JPanel implements Workspace {
   private final Consumer<ReaderLocation> read;
   private final UiTasks listings = new UiTasks(),
       details = new UiTasks(),
+      ratingSummaryTasks = new UiTasks(),
       actions = new UiTasks(),
       metadata = new UiTasks();
   private final UiTasks recommendations = new UiTasks(), rankings = new UiTasks();
@@ -82,11 +83,11 @@ public final class CatalogPanel extends JPanel implements Workspace {
 
   private boolean isFavorite = false;
   private boolean isFollowing = false;
-  private double currentRating = 4.8;
+  private double currentRating = 0.0;
   private int currentRatingCount = 0;
   private final JButton favButton = new JButton("Yêu thích");
   private final JButton followButton = new JButton("Theo dõi");
-  private final JLabel ratingStatLabel = Theme.plainLabel("★ 4.8/5 (0 đánh giá)");
+  private final JLabel ratingStatLabel = Theme.plainLabel("★ 0.0/5 (0 đánh giá)");
   private final JLabel chCountLabel = Theme.plainLabel("· 0 chương");
   private final JButton chMoreBtn = new JButton("Xem thêm chương ▼");
 
@@ -129,7 +130,7 @@ public final class CatalogPanel extends JPanel implements Workspace {
 
     JPanel heading = new JPanel(new GridLayout(0, 1, 0, 4));
     heading.setOpaque(false);
-    JLabel eyebrow = Theme.plainLabel("KHÁM PHÁ");
+    JLabel eyebrow = Theme.plainLabel("TRANG CHỦ");
     eyebrow.setForeground(Theme.ACTION);
     eyebrow.setFont(Theme.brand(11));
     JLabel title = new JLabel("Hôm nay đọc gì?");
@@ -488,7 +489,7 @@ public final class CatalogPanel extends JPanel implements Workspace {
             item.path("id").asText(),
             item.path("title").asText("Truyện"),
             item.path("type").asText("Manga"),
-            item.path("rating").isNumber() ? String.format(Locale.ROOT, " %.1f", item.path("rating").asDouble()) : " 4.8",
+            item.path("rating").isNumber() ? String.format(Locale.ROOT, " %.1f", item.path("rating").asDouble()) : " 0.0",
             item.path("coverUrl").asText(""),
             -1));
       }
@@ -820,7 +821,7 @@ public final class CatalogPanel extends JPanel implements Workspace {
     private final CoverArtCanvas coverCanvas = new CoverArtCanvas(10);
     private final JLabel titleLabel = Theme.plainLabel("");
     private final JLabel tagLabel = Theme.plainLabel("");
-    private final JLabel ratingLabel = Theme.plainLabel("★ 4.8");
+    private final JLabel ratingLabel = Theme.plainLabel("★ 0.0");
     private final JLabel viewsLabel = Theme.plainLabel("2.1M");
 
     ComicCard(JsonNode comic) {
@@ -884,7 +885,7 @@ public final class CatalogPanel extends JPanel implements Workspace {
 
       JPanel stats = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
       stats.setOpaque(false);
-      double r = comic.path("rating").asDouble(4.8);
+      double r = comic.path("rating").asDouble(0.0);
       ratingLabel.setIcon(UiIcons.star(11, new Color(0xF5, 0x9E, 0x0B)));
       ratingLabel.setText(String.format(Locale.ROOT, " %.1f", r));
       ratingLabel.setFont(Theme.brand(11));
@@ -945,16 +946,16 @@ public final class CatalogPanel extends JPanel implements Workspace {
           selected = reply.body();
 
           // Fetch rating summary
-          details.run(
+          ratingSummaryTasks.run(
               this,
               detailMessage,
               api.get("/comics/" + comicId + "/rating-summary"),
               rReply -> {
                 if (rReply.body() != null && rReply.body().has("average")) {
-                  currentRating = rReply.body().path("average").asDouble(4.8);
+                  currentRating = rReply.body().path("average").asDouble(0.0);
                   currentRatingCount = rReply.body().path("count").asInt(0);
                 } else {
-                  currentRating = selected.path("rating").asDouble(4.8);
+                  currentRating = selected.path("rating").asDouble(0.0);
                   currentRatingCount = 0;
                 }
                 updateRatingDisplay();
@@ -1426,10 +1427,10 @@ public final class CatalogPanel extends JPanel implements Workspace {
       if (selected != null) {
         String comicId = selected.path("id").asText();
         new RatingDialog(detailDialog, api, comicId, () -> {
-          details.run(this, detailMessage, api.get("/comics/" + comicId + "/rating-summary"),
+          ratingSummaryTasks.run(this, detailMessage, api.get("/comics/" + comicId + "/rating-summary"),
               rReply -> {
                 if (rReply.body() != null && rReply.body().has("average")) {
-                  currentRating = rReply.body().path("average").asDouble(4.8);
+                  currentRating = rReply.body().path("average").asDouble(0.0);
                   currentRatingCount = rReply.body().path("count").asInt(0);
                   updateRatingDisplay();
                 }
@@ -1709,12 +1710,14 @@ public final class CatalogPanel extends JPanel implements Workspace {
   @Override public void onHidden() {
     listings.close();
     details.close();
+    ratingSummaryTasks.close();
     actions.close();
   }
 
   @Override public void sessionChanged() {
     listings.close();
     details.close();
+    ratingSummaryTasks.close();
     actions.close();
     load();
   }
@@ -1722,6 +1725,7 @@ public final class CatalogPanel extends JPanel implements Workspace {
   @Override public void close() {
     listings.close();
     details.close();
+    ratingSummaryTasks.close();
     actions.close();
     recommendations.close();
     rankings.close();

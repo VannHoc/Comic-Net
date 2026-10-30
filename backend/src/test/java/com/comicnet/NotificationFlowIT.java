@@ -91,6 +91,19 @@ class NotificationFlowIT {
   }
 
   @Test
+  void registrationAndFirstLoginCreateOneDurableWelcome() {
+    assertThat(inbox(author))
+        .filteredOn(n -> n.title().equals("Chào mừng bạn đến với Comic Net"))
+        .hasSize(1);
+    String email = jdbc.queryForObject("SELECT Email FROM dbo.[User] WHERE Id=?", String.class, author.userId());
+    actors.login(email);
+    actors.login(email);
+    assertThat(inbox(author))
+        .filteredOn(n -> n.title().equals("Chào mừng bạn đến với Comic Net"))
+        .hasSize(1);
+  }
+
+  @Test
   void replyAndReactionNotificationsRespectOwnershipPreferencesAndDeduplication() {
     var parent = comment(author, "Bình luận gốc", null);
     comment(replier, "Trả lời lần một", parent.id());
@@ -98,16 +111,16 @@ class NotificationFlowIT {
 
     var authorInbox = inbox(author);
     assertThat(authorInbox).filteredOn(n -> n.type().equals("COMMENT_REPLY")).hasSize(1);
-    assertThat(notifications.summary(author).unread()).isEqualTo(1);
+    assertThat(notifications.summary(author).unread()).isEqualTo(2);
     var reply = authorInbox.getFirst();
     assertThat(reply.linkType()).isEqualTo("COMMENT");
     assertThat(reply.read()).isFalse();
-    assertThat(inbox(replier)).isEmpty();
+    assertThat(inbox(replier)).filteredOn(n -> n.type().equals("COMMENT_REPLY")).isEmpty();
 
     notifications.read(author, Ids.parse(reply.id()), true);
-    assertThat(notifications.summary(author).unread()).isZero();
-    notifications.read(author, Ids.parse(reply.id()), false);
     assertThat(notifications.summary(author).unread()).isEqualTo(1);
+    notifications.read(author, Ids.parse(reply.id()), false);
+    assertThat(notifications.summary(author).unread()).isEqualTo(2);
 
     comments.vote(third, Ids.parse(parent.id()), 1);
     drain();
@@ -138,8 +151,8 @@ class NotificationFlowIT {
   void announcementReachesActiveAccountsOnceAndReadAllClearsTheInbox() {
     var created = notifications.announce(admin, new AnnouncementInput("Bảo trì", "Hệ thống bảo trì 22:00."));
     assertThat(created.recipients()).isPositive();
-    assertThat(inbox(author)).filteredOn(n -> n.type().equals("SYSTEM_ANNOUNCEMENT")).hasSize(1);
-    assertThat(inbox(third)).filteredOn(n -> n.type().equals("SYSTEM_ANNOUNCEMENT")).hasSize(1);
+    assertThat(inbox(author)).filteredOn(n -> n.type().equals("SYSTEM_ANNOUNCEMENT")).hasSize(2);
+    assertThat(inbox(third)).filteredOn(n -> n.type().equals("SYSTEM_ANNOUNCEMENT")).hasSize(2);
     assertThat(notifications.announcements(admin, 0, 20).items()).hasSize(1);
 
     notifications.readAll(third);
@@ -149,6 +162,6 @@ class NotificationFlowIT {
                 "SELECT COUNT(*) FROM dbo.Notification WHERE UserId=? AND Type='SYSTEM_ANNOUNCEMENT'",
                 Integer.class,
                 third.userId()))
-        .isEqualTo(1);
+        .isEqualTo(2);
   }
 }

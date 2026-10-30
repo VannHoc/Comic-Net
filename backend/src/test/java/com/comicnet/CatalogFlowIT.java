@@ -104,12 +104,28 @@ class CatalogFlowIT {
         .isEmpty();
     catalog.patch(
         creator, id, json.readTree("{\"ageRating\":\"18_PLUS\"}"), Etags.of(catalog.version(id)));
-    assertThatThrownBy(() -> catalog.publicDetail(id)).isInstanceOf(DomainException.class);
+    assertThat(catalog.publicDetail(id).id()).isEqualTo(id + "");
     assertThat(
             catalog
                 .list(new CatalogQueries.Filter(slug, null, null, null, null, null), 0, 20)
                 .items())
-        .isEmpty();
+        .hasSize(1);
+  }
+
+  @Test
+  void administratorCanHideAndRepublishWithoutDeletingComic() {
+    Identity admin = actors.administrator();
+    var comic = catalog.create(admin, input("Tái xuất bản", "repub-" + key(), "ALL_AGE"), key());
+    long id = Ids.parse(comic.id());
+    catalog.visibility(admin, id, new VisibilityPut("PUBLIC", "JUnit publish"), Etags.of(catalog.version(id)));
+    assertThat(catalog.publicDetail(id).title()).isEqualTo("Tái xuất bản");
+    catalog.visibility(admin, id, new VisibilityPut("HIDDEN", "JUnit unpublish"), Etags.of(catalog.version(id)));
+    assertThatThrownBy(() -> catalog.publicDetail(id)).isInstanceOf(DomainException.class);
+    assertThat(catalog.managedDetail(admin, id).visibility()).isEqualTo("HIDDEN");
+    catalog.visibility(admin, id, new VisibilityPut("PUBLIC", "JUnit republish"), Etags.of(catalog.version(id)));
+    assertThat(catalog.publicDetail(id).title()).isEqualTo("Tái xuất bản");
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM dbo.Comic WHERE Id=? AND DeletedAt IS NULL", Integer.class, id))
+        .isEqualTo(1);
   }
 
   @Test

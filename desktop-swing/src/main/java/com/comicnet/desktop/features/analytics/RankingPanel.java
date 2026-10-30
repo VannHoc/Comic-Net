@@ -417,7 +417,7 @@ public final class RankingPanel extends JPanel implements Workspace {
     String cId = comic.path("comicId").asText();
     String title = comic.path("title").asText("Truyện");
     long views = comic.path("views").asLong(0);
-    double rating = comic.path("rating").asDouble(4.8);
+    double rating = comic.path("rating").asDouble(0.0);
 
     // Cover art left
     CoverArtCanvas cover = new CoverArtCanvas(10);
@@ -523,7 +523,7 @@ public final class RankingPanel extends JPanel implements Workspace {
       int rank = row.path("rank").asInt(i + 1);
       String title = row.path("title").asText("Truyện");
       long views = row.path("views").asLong(0);
-      double rating = row.path("rating").asDouble(4.5);
+      double rating = row.path("rating").asDouble(0.0);
       tableModel.addRow(new Object[] {
           "#" + rank,
           title,
