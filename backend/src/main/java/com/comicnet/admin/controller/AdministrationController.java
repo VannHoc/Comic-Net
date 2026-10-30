@@ -27,7 +27,7 @@ public class AdministrationController {
 
   public record RolesPut(
       @NotEmpty @Size(max = 4)
-          List<@Pattern(regexp = "READER|CREATOR|MODERATOR|ADMINISTRATOR") String> roles) {}
+          List<@Pattern(regexp = "READER|CREATOR|ADMINISTRATOR") String> roles) {}
 
   public record TeamCreate(
       @NotBlank @Size(max = 200) String name,

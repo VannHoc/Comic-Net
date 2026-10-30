@@ -83,6 +83,10 @@ public final class ApiClient {
     return session.accessToken() != null;
   }
 
+  public String apiBase() {
+    return config.apiBase().toString();
+  }
+
   public AutoCloseable onSessionChanged(Runnable listener) {
     return session.onChanged(listener);
   }

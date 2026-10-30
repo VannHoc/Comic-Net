@@ -1,5 +1,74 @@
 # Bàn giao gần nhất
 
+## Phiên 2026-10-30 — OpenAI Codex: chỉ cấu hình sau khi người dùng restore `.bak`
+
+- Người dùng nói rõ họ sẽ gửi `.bak` cho máy mới và tự restore, yêu cầu script cấu hình/kết nối. Không có `.bak` trong workspace hoặc attachments phiên này; không thao tác DB hiện tại.
+- Sửa `deploy/setup/Setup.ps1`: mode mặc định `Restore`; từ chối khi `ComicNetDev` chưa có, không đọc/restore file backup; dùng SQL admin để tạo/remap `comicnet_app` và `comicnet_migrator`, rồi kiểm tra login, chạy Flyway và grants. Sửa `INSTALL.md` với trình tự SSMS restore → Setup → Start và cảnh báo ảnh RustFS ngoài `.bak`. Cập nhật `PROGRESS.md`, `TASKS.md`, `HANDOFF.md`. Không sửa backend/API/schema bằng tay.
+- Test thực chạy: PowerShell parser cho Setup 0 lỗi. Chưa chạy Setup trên máy mới, chưa kiểm chứng SQL login mapping/Flyway/grants/health/GUI. Tiếp theo dùng instance SQL test có backup đã restore để kiểm chứng; không thử trên ComicNetDev đang có dữ liệu.
+
+## Phiên 2026-10-30 — OpenAI Codex: bộ cài Windows mới đang triển khai
+
+- Đọc AGENTS/PROGRESS/TASKS/README, source config, Flyway, scripts deploy, SQL provision/grants và tài liệu yêu cầu đính kèm. Không sửa phần nghiệp vụ/backend/API/DB. Giữ các thay đổi chưa commit trước đó.
+- Tạo `deploy/setup/Common.ps1`, `Setup.ps1`, `Start.ps1`, `INSTALL.md`; sửa `PROGRESS.md`, `TASKS.md`, `HANDOFF.md`. Cấu hình local lưu `.local/setup/connection.xml` bằng Windows DPAPI, đã được `.gitignore` bao phủ. Setup kiểm tra môi trường và SQL TCP, tạo DB trống qua template, chạy MigrationCommand và grants; Start kiểm tra SQL, dùng services/launcher Swing hiện có và kiểm tra readiness backend.
+- Test thực chạy: PowerShell parser 3/3 PASS; `mvn -o -B -ntp -pl desktop-swing -am test` 26/26 PASS. `mvn -o -B -ntp -pl backend,desktop-swing -am -DskipTests package` FAIL vì backend JAR đang bị tiến trình khác giữ (`Unable to rename ...jar to ...jar.original`). Chưa chạy Setup/Start thực, SQL/Flyway/restore hoặc GUI trên máy mới.
+- Tồn đọng quan trọng: RESTORE tự động chưa triển khai; `Setup.ps1 -Mode Restore` từ chối ghi đè và dừng, INSTALL.md hướng dẫn SSMS thủ công. Cần thiết kế và kiểm thử logical file MOVE, login mapping và asset backup trước khi hỗ trợ tự động. Nhánh FRESH cũng cần kiểm thử trên SQL instance trống; hiện chưa xác nhận kết quả. `Start.ps1` chỉ build nếu thiếu JAR, tránh lỗi JAR bị khóa lúc chạy hằng ngày.
+- Bước tiếp theo: đóng backend đang chạy khi có thể, chạy package; dùng SQL instance thử nghiệm trống để test FRESH (không dùng ComicNetDev có dữ liệu), hoàn thiện RESTORE, rồi test Start/readiness/Swing và cập nhật INSTALL.md theo kết quả.
+
+## Phiên 2026-10-30 — Google Antigravity: Sửa Lỗi Đọc Truyện (Logic Inversion), Xem Thêm Chương, Rating 5 Sao, Ranking & App Branding (QA Backend & GUI PASS 100%)
+
+- **Agent:** Google Antigravity; ngày: 2026-10-30.
+- **Tình trạng bàn giao & nhiệm vụ đã hoàn thành:**
+  1. **Sửa dứt điểm Lỗi Logic Đọc Truyện (Inversion Bug):**
+     - *Hiện tượng cũ:* Bấm "Đọc tiếp" mở từ đầu; bấm "Đọc từ đầu" lại khôi phục vị trí cũ.
+     - *Nguyên nhân:* Thứ tự danh sách chương backend trả về theo `SortOrder` tăng dần (index 0 là Chapter 1). Trước đó logic gọi nhầm index cuối và luôn tự động khôi phục vị trí lưu dở do thiếu phân định chế độ đọc.
+     - *Đã khắc phục:*
+       - Bổ sung `ReadMode` enum (`START_FROM_BEGINNING`, `RESUME`) trong `ReaderLocation.java`.
+       - "Đọc từ đầu": Mở `chapterRows.get(0)` tại trang 1, offset 0 với `ReaderLocation.startFromBeginning(chapterId)`. `ReaderPanel.java` khởi tạo vị trí đầu trang mà không nạp tiến độ cũ, không xóa lịch sử và không ghi đè bừa bãi tiến độ của người dùng.
+       - "Đọc tiếp": Truy vấn `/api/v1/me/history?size=50` để tìm chương đọc gần nhất của truyện. Nếu chương trước đã hoàn thành, tự động chuyển sang chương tiếp theo; nếu đang đọc dở, khôi phục chính xác chương, trang và offset dọc; nếu chưa có lịch sử, bắt đầu từ chương 1 trang 1.
+       - "Đọc chương": Mở đúng chương được click chọn từ bảng chương, bắt đầu từ trang 1 (hoặc vị trí đã lưu của chương đó).
+  2. **Sửa lỗi "Xem thêm chương" bị biến mất toàn bộ danh sách:**
+     - *Nguyên nhân:* Hàm `loadChapters()` trước đó gọi `chapterRows.clear()` vô điều kiện trước khi fetch, dẫn đến việc xóa sạch toàn bộ danh sách cũ khi đang tải trang tiếp theo.
+     - *Đã khắc phục:* `loadChapters(boolean append)` chỉ xóa hàng khi tải mới từ trang 0. Khi nhấn "Xem thêm chương ▼", hệ thống nối tiếp các chương trang kế tiếp (`chapterPage++`). Khi đã hiển thị tất cả chương, nút chuyển thành `"Đã hiển thị tất cả N chương"` và tự disable.
+  3. **Thiết kế lại toàn diện Rating Dialog (Đánh giá 5 sao & Nhận xét):**
+     - *StarRatingPicker:* Thay thế JSpinner bằng bộ chọn 5 sao vàng tương tác trực tiếp (hỗ trợ hover đổi màu, click chọn từ 1 đến 5 sao).
+     - *Phần Tổng quan (Overview):* Điểm số to 5.0, 5 sao vàng, tổng lượt đánh giá, thanh phân phối tỷ lệ 5★ đến 1★ với icon vector Graphics2D vàng kim `UiIcons.star(10, ...)`.
+     - *Danh sách nhận xét cộng đồng:* Thiết kế card hiện đại hiển thị avatar tròn ký tự đầu, tên người dùng, thời gian, số sao, nội dung nhận xét, phân trang mượt mà.
+     - *Đồng bộ thời gian thực:* Khi gửi hoặc xóa đánh giá, kích hoạt callback `onRatingUpdated` để làm mới điểm trung bình và số lượt đánh giá trên dialog chi tiết truyện và thẻ catalog.
+  4. **Kích hoạt luồng Bảng Xếp Hạng (Ranking) & Ghi nhận Lượt Đọc (Views):**
+     - Cấu hình Spring Security: Bổ sung matcher `authenticated()` cho `POST /api/v1/comics/*/views` và `POST /api/v1/chapters/*/completion`, bỏ chặn 403 để `ReaderPanel` ghi nhận lượt đọc hợp lệ vào bảng `dbo.ComicView` và `dbo.ComicStatDaily`.
+     - `AnalyticsService.java`: Bổ sung chu kỳ `RATING`, gỡ bỏ bộ lọc cứng `AgeRating='ALL_AGE'` để mọi truyện công khai hợp lệ đều tham gia bảng xếp hạng.
+     - `RankingPanel.java`: Khối TOP 3 Podium hiển thị vương miện hoàng gia vector Graphics2D (`UiIcons.crown`), huy hiệu TOP 2/3 vector không lỗi font; bảng xếp hạng phẳng chuẩn Design System; cột Đánh giá dùng vector star vàng kim.
+  5. **Tinh chỉnh Dialog Chi Tiết Truyện (`CatalogPanel.detailDialog`):**
+     - Loại bỏ nút đóng X thừa bên trong giao diện (tránh 2 nút X chồng chéo).
+     - Chuẩn hóa phần tóm tắt giới thiệu tiếng Việt sạch sẽ với nút mở rộng/thu gọn "Xem thêm / Thu gọn".
+     - Mở rộng combobox Bản dịch (225px) tránh bị cắt ngắn tên nhóm dịch `(#227)`.
+  6. **Bộ Nhận Diện Thương Hiệu & Icon Ứng Dụng:**
+     - Tạo bộ icon ứng dụng đa kích thước (16, 32, 48, 64, 128, 256px) và `comic-net.ico` tại `desktop-swing/src/main/resources/icons/`.
+     - Cung cấp `AppIcons.java` áp dụng đồng bộ `AppIcons.applyTo(Window)` cho `MainFrame`, `detailDialog` và `RatingDialog`.
+- **File sửa đổi:**
+  - `backend/src/main/java/com/comicnet/config/SecurityConfiguration.java`
+  - `backend/src/main/java/com/comicnet/analytics/service/AnalyticsService.java`
+  - `desktop-swing/src/main/java/com/comicnet/desktop/ui/MainFrame.java`
+  - `desktop-swing/src/main/java/com/comicnet/desktop/ui/AppIcons.java`
+  - `desktop-swing/src/main/java/com/comicnet/desktop/features/reader/ReaderLocation.java`
+  - `desktop-swing/src/main/java/com/comicnet/desktop/features/reader/ReaderPanel.java`
+  - `desktop-swing/src/main/java/com/comicnet/desktop/features/catalog/CatalogPanel.java`
+  - `desktop-swing/src/main/java/com/comicnet/desktop/features/recommendation/RatingDialog.java`
+  - `desktop-swing/src/main/java/com/comicnet/desktop/features/analytics/RankingPanel.java`
+  - `desktop-swing/src/test/java/com/comicnet/desktop/ui/CaptureNewFeaturesIT.java`
+  - `PROGRESS.md`, `TASKS.md`, `HANDOFF.md`
+- **Bằng chứng kiểm thử nghiệm thu (Evidence):**
+  - Backend daemon `comic-net-backend` đang chạy tại `http://127.0.0.1:8080` (health UP).
+  - Reactor Unit tests: **55/55 PASS** toàn dự án (Backend 29/29, Desktop Swing 26/26).
+  - API Contract Test: **174/174 operations PASS**.
+  - Live UI Integration Tests: `RedesignUiLiveIT` PASS (38.1s), `CaptureNewFeaturesIT` PASS (10.7s).
+  - Bộ ảnh QA thực tế đầy đủ tại `.local/qa/redesign/` (bao gồm `13-ranking-live.jpg`, `14-rating-dialog-redesign.jpg`, `15-comic-detail-polished.jpg`).
+  - Đóng gói file JAR độc lập `comic-net-desktop-swing-0.1.0-SNAPSHOT.jar` BUILD SUCCESS.
+- **Bước kế tiếp cho Agent tiếp theo:**
+  - Tiếp tục phát triển theo roadmap Phase 4: Thanh toán tích hợp hoặc các tính năng cộng đồng mở rộng.
+  - Khởi động backend local khi cần: `cd "C:\Users\studi\OneDrive\Documents\Tools\Comic Net"; .\deploy\Start-Backend.ps1 -Mode Run -UseLocalConfiguration`.
+  - Khởi động desktop-swing local: `.\deploy\Start-Desktop.ps1`.
+
 ## Phiên 2026-10-30 — Google Antigravity: Khắc phục Triệt để Lỗi Đánh Giá Truyện & Lỗi Truy Cập Thông Báo Bị Chặn (QA Backend & GUI PASS 100%)
 
 - **Agent:** Google Antigravity; ngày: 2026-10-30.
@@ -448,3 +517,9 @@
 - Bằng chứng test gần nhất từ phiên trước: Maven backend + Swing unit tests PASS; `WalletFlowIT` với SQL thật 4/4 PASS; Flyway V25 success. Phiên này không chạy lại test ứng dụng vì không sửa logic.
 - Tồn đọng: chưa QA trực tiếp giao diện Swing mới cho gói nạp, đơn thất bại/hết hạn và hoàn xu; SQL Full-Text từng bị chặn do instance thiếu tính năng, cần kiểm tra lại. Sandbox chưa phải cổng thanh toán thật.
 - Tiếp theo: đọc cả bốn file, kiểm tra `git status`, source và báo cáo test mới nhất; khởi động backend bằng lệnh trong `AGENTS.md`, mở Swing từ source mới và QA vòng đời đơn. Sau đó cập nhật cả ba tài liệu tiến độ/bàn giao.
+
+## Phiên 2026-10-30 — OpenAI Codex tiếp nhận ngắn
+- Đã đọc bốn file điều phối và kiểm tra Git status. Bàn giao mới nhất thuộc Google Antigravity, có thay đổi chưa commit ở backend/Swing/icons; giữ nguyên.
+- Chưa sửa source, API, DB hoặc cấu hình; chưa chạy test hay QA trong phiên tiếp nhận này. Trạng thái PASS trong bàn giao là kết quả phiên trước, chưa được xác minh lại.
+- Bước tiếp theo: rà chi tiết thay đổi mới nhất, đối chiếu source và báo cáo test, rồi tiếp tục UI/UX còn tồn đọng theo TASKS.md.
+

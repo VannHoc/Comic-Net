@@ -13,6 +13,7 @@ import com.comicnet.desktop.features.wallet.AdminWalletPanel;
 import com.comicnet.desktop.features.gamification.GamificationPanel;
 import com.comicnet.desktop.features.notification.NotificationsPanel;
 import com.comicnet.desktop.features.observability.OperationsPanel;
+import com.comicnet.desktop.features.publishing.AdminReviewQueuePanel;
 import com.comicnet.desktop.features.publishing.PublishingPanel;
 import com.comicnet.desktop.features.reader.*;
 import com.comicnet.desktop.features.observability.SystemPresenter;
@@ -52,6 +53,7 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
     setMinimumSize(new Dimension(1180, 720));
     setSize(1440, 880);
     setLocationRelativeTo(null);
+    AppIcons.applyTo(this);
 
     JPanel root = new JPanel(new BorderLayout());
     root.setBackground(Theme.BACKGROUND);
@@ -165,7 +167,7 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
         UiIcons.barChart(18, Theme.MUTED));
     addWorkspace("Thông báo", new NotificationsPanel(api), UiIcons.bell(18, Theme.MUTED));
     addWorkspace(
-        "Xuất bản",
+        "Xưởng xuất bản",
         new PublishingPanel(
             api,
             draft -> {
@@ -187,6 +189,10 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
               dialog.setVisible(true);
             }),
         UiIcons.feather(18, Theme.MUTED));
+    addWorkspace(
+        "Duyệt nội dung",
+        new AdminReviewQueuePanel(api),
+        UiIcons.check(18, Theme.MUTED));
     account = new AccountPanel(api, () -> {});
     addWorkspace("Tài khoản", account, UiIcons.user(18, Theme.MUTED));
     administration = new AdministrationPanel(api);
@@ -417,13 +423,13 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
   }
 
   private void refreshRoleNavigation() {
-    for (String title : java.util.List.of("Xuất bản", "Quản trị", "Quản lý ví xu", "Vận hành", "Hệ thống")) {
+    for (String title : java.util.List.of("Xưởng xuất bản", "Xuất bản", "Duyệt nội dung", "Quản trị", "Quản lý ví xu", "Vận hành", "Hệ thống")) {
       NavigationButton button = navButtons.get(title);
       if (button != null) button.setVisible(false);
     }
     if (!api.signedIn()) {
-      if ("Xuất bản".equals(active) || "Quản trị".equals(active)
-          || "Quản lý ví xu".equals(active)
+      if ("Xưởng xuất bản".equals(active) || "Xuất bản".equals(active) || "Duyệt nội dung".equals(active)
+          || "Quản trị".equals(active) || "Quản lý ví xu".equals(active)
           || "Vận hành".equals(active) || "Hệ thống".equals(active)) showWorkspace("Khám phá");
       return;
     }
@@ -433,13 +439,31 @@ public final class MainFrame extends JFrame implements SystemPresenter.View, Aut
       for (var role : reply.body().path("roles")) roles.add(role.asText().toUpperCase(java.util.Locale.ROOT));
       boolean admin = roles.contains("ADMINISTRATOR") || roles.contains("ADMIN");
       boolean creator = admin || roles.contains("CREATOR");
+      if (navButtons.get("Xưởng xuất bản") != null) navButtons.get("Xưởng xuất bản").setVisible(creator);
       if (navButtons.get("Xuất bản") != null) navButtons.get("Xuất bản").setVisible(creator);
+      if (navButtons.get("Duyệt nội dung") != null) {
+        navButtons.get("Duyệt nội dung").setVisible(admin);
+        if (admin) {
+          api.get("/publishing/review-queue?page=0&size=1").whenComplete((qReply, qErr) -> {
+            if (qReply != null && qErr == null) {
+              long total = qReply.body().path("total").asLong(0);
+              SwingUtilities.invokeLater(() -> {
+                NavigationButton btn = navButtons.get("Duyệt nội dung");
+                if (btn != null && total > 0) {
+                  btn.setHasDot(true);
+                  btn.repaint();
+                }
+              });
+            }
+          });
+        }
+      }
       if (navButtons.get("Quản trị") != null) navButtons.get("Quản trị").setVisible(admin);
       if (navButtons.get("Quản lý ví xu") != null) navButtons.get("Quản lý ví xu").setVisible(admin);
       if (navButtons.get("Vận hành") != null) navButtons.get("Vận hành").setVisible(admin);
       if (navButtons.get("Hệ thống") != null) navButtons.get("Hệ thống").setVisible(admin);
-      if (("Xuất bản".equals(active) && !creator)
-          || (("Quản trị".equals(active) || "Quản lý ví xu".equals(active)
+      if ((("Xưởng xuất bản".equals(active) || "Xuất bản".equals(active)) && !creator)
+          || (("Duyệt nội dung".equals(active) || "Quản trị".equals(active) || "Quản lý ví xu".equals(active)
               || "Vận hành".equals(active) || "Hệ thống".equals(active)) && !admin))
         showWorkspace("Khám phá");
       navigation.revalidate();

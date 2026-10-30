@@ -1,1030 +1,469 @@
 package com.comicnet.desktop.features.publishing;
 
-import com.comicnet.desktop.client.api.*;
-import com.comicnet.desktop.ui.*;
+import com.comicnet.desktop.client.api.ApiClient;
+import com.comicnet.desktop.features.catalog.CatalogPanel.CoverArtCanvas;
+import com.comicnet.desktop.ui.Theme;
+import com.comicnet.desktop.ui.UiIcons;
+import com.comicnet.desktop.ui.Workspace;
 import java.awt.*;
-import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import javax.swing.table.DefaultTableModel;
 import tools.jackson.databind.JsonNode;
 
 public final class PublishingPanel extends JPanel implements Workspace {
   private final ApiClient api;
-  private final Consumer<JsonNode> preview;
-  private final UiTasks details = new UiTasks(),
-      actions = new UiTasks(),
-      uploads = new UiTasks(),
-      polling = new UiTasks();
-  private final JLabel message = Theme.plainLabel("Đăng nhập bằng tài khoản có quyền xuất bản."),
-      versionLabel = Theme.plainLabel("Chọn version để biên tập."),
-      jobLabel = Theme.plainLabel("Chưa có upload.");
-  private final JTextField jobId = new JTextField(10);
-  private final JProgressBar uploadProgress = new JProgressBar();
-  private final RemoteTable comics, translations, chapters, volumes, versions, queue;
-  private final List<RemoteTable> tables;
-  private final List<JsonNode> pageRows = new ArrayList<>();
-  private final DefaultTableModel pageModel =
-      new DefaultTableModel(new Object[] {"Thứ tự", "Page ID", "Kích thước", "Asset"}, 0) {
-        @Override
-        public boolean isCellEditable(int r, int c) {
-          return false;
-        }
-      };
-  private final JTable pageTable = new JTable(pageModel);
-  private String comicId, translationId, chapterId;
-  private ApiClient.Reply version, versionChapter;
-  private boolean administrator, visibleWorkspace;
-  private int pollDelay = 1800;
-  private final javax.swing.Timer pollTimer;
-  private final MutationKey mutation = new MutationKey(), uploadKey = new MutationKey();
+  private final Consumer<JsonNode> previewCallback;
+  private boolean administrator = false;
 
-  public PublishingPanel(ApiClient api, Consumer<JsonNode> preview) {
-    super(new BorderLayout(0, 12));
+  private final CardLayout rootLayout = new CardLayout();
+  private final JPanel rootHost = new JPanel(rootLayout);
+
+  // Dashboard components (Mockup 01)
+  private final JPanel dashboardView = new JPanel(new BorderLayout(0, 16));
+  private final JLabel kpiTotal = new JLabel("00");
+  private final JLabel kpiDraft = new JLabel("00");
+  private final JLabel kpiPending = new JLabel("00");
+
+  private final JPanel cardsGrid = new JPanel();
+  private final JTextField searchField = new JTextField(18);
+  private final JComboBox<String> filterCombo = new JComboBox<>(new String[] {"Trạng thái: Tất cả", "Bản nháp", "Chờ duyệt", "Đã xuất bản"});
+  private final List<JsonNode> allComics = new ArrayList<>();
+  private String currentFilter = "ALL";
+
+  // Wizard and Feedback sub-panels
+  private ComicEditorWizard wizard;
+  private CreatorFeedbackPanel feedbackPanel;
+
+  public PublishingPanel(ApiClient api, Consumer<JsonNode> previewCallback) {
+    super(new BorderLayout());
     this.api = api;
-    this.preview = preview;
+    this.previewCallback = previewCallback;
+
     setOpaque(false);
     setBorder(new EmptyBorder(Theme.CONTENT_PADDING, Theme.CONTENT_PADDING, 24, Theme.CONTENT_PADDING));
-    JPanel header = new JPanel(new BorderLayout(0, 4));
-    header.setOpaque(false);
-    JLabel eyebrow = Theme.plainLabel("CREATOR STUDIO");
-    eyebrow.setForeground(Theme.PRIMARY);
-    eyebrow.setFont(Theme.heading(11));
-    JLabel heading = new JLabel("Xưởng xuất bản");
-    heading.setFont(Theme.heading(28));
-    heading.setForeground(Theme.TEXT);
-    JLabel sub = Theme.plainLabel("Quản lý tác phẩm, bản dịch, chương truyện và quy trình duyệt ấn bản.");
-    sub.setFont(Theme.label(13));
-    sub.setForeground(Theme.MUTED);
+
+    buildDashboard();
+
+    wizard = new ComicEditorWizard(api, administrator, () -> {
+      rootLayout.show(rootHost, "DASHBOARD");
+      loadDashboardData();
+    });
+
+    feedbackPanel = new CreatorFeedbackPanel(
+        api,
+        () -> {
+          rootLayout.show(rootHost, "DASHBOARD");
+          loadDashboardData();
+        },
+        chapterId -> {
+          // Open wizard on chapter step
+          rootLayout.show(rootHost, "WIZARD");
+        });
+
+    rootHost.setOpaque(false);
+    rootHost.add(dashboardView, "DASHBOARD");
+    rootHost.add(wizard, "WIZARD");
+    rootHost.add(feedbackPanel, "FEEDBACK");
+
+    add(rootHost, BorderLayout.CENTER);
+  }
+
+  // ==================== DASHBOARD VIEW (Mockup 01) ====================
+  private void buildDashboard() {
+    dashboardView.setOpaque(false);
+
+    // Top Header: Title & "+ Tạo truyện" button
+    JPanel topHeader = new JPanel(new BorderLayout(0, 6));
+    topHeader.setOpaque(false);
 
     JPanel titleBox = new JPanel(new GridLayout(0, 1, 0, 2));
     titleBox.setOpaque(false);
+
+    JLabel eyebrow = Theme.plainLabel("CREATOR STUDIO");
+    eyebrow.setFont(Theme.heading(11));
+    eyebrow.setForeground(Theme.PRIMARY);
+
+    JLabel heading = new JLabel("Xưởng xuất bản");
+    heading.setFont(Theme.heading(28));
+    heading.setForeground(Theme.TEXT);
+
+    JLabel sub = Theme.plainLabel("Quản lý truyện của bạn — tạo mới, thêm chương và gửi duyệt trước khi xuất bản.");
+    sub.setFont(Theme.label(13));
+    sub.setForeground(Theme.MUTED);
+
     titleBox.add(eyebrow);
     titleBox.add(heading);
     titleBox.add(sub);
-    header.add(titleBox, BorderLayout.WEST);
-    add(header, BorderLayout.NORTH);
-    comics =
-        new RemoteTable(
-            api,
-            new String[] {"Truyện quản lý", "Loại"},
-            p -> "/publishing/comics?page=" + p + "&size=20",
-            v -> new Object[] {v.path("title").asText(), v.path("type").asText()});
-    translations =
-        new RemoteTable(
-            api,
-            new String[] {"Bản dịch", "Ấn bản", "Hiển thị"},
-            p ->
-                comicId == null
-                    ? null
-                    : "/publishing/comics/" + comicId + "/translations?page=" + p + "&size=20",
-            v ->
-                new Object[] {
-                  v.path("languageTag").asText(),
-                  v.path("editionKey").asText(),
-                  v.path("visibility").asText()
-                });
-    chapters =
-        new RemoteTable(
-            api,
-            new String[] {"Chương", "Tên", "Hiển thị"},
-            p ->
-                translationId == null
-                    ? null
-                    : "/publishing/translations/"
-                        + translationId
-                        + "/chapters?page="
-                        + p
-                        + "&size=20",
-            v ->
-                new Object[] {
-                  v.path("displayNumber").asText(),
-                  v.path("title").asText(),
-                  v.path("visibility").asText()
-                });
-    volumes =
-        new RemoteTable(
-            api,
-            new String[] {"Volume", "Thứ tự"},
-            p ->
-                translationId == null
-                    ? null
-                    : "/publishing/translations/"
-                        + translationId
-                        + "/volumes?page="
-                        + p
-                        + "&size=20",
-            v -> new Object[] {v.path("displayLabel").asText(), v.path("sortOrder").asText()});
-    versions =
-        new RemoteTable(
-            api,
-            new String[] {"Version", "Trạng thái", "Số trang"},
-            p ->
-                chapterId == null
-                    ? null
-                    : "/publishing/chapters/" + chapterId + "/versions?page=" + p + "&size=20",
-            v ->
-                new Object[] {
-                  v.path("versionNumber").asInt(), v.path("state").asText(), v.path("pages").size()
-                });
-    queue =
-        new RemoteTable(
-            api,
-            new String[] {"Chương", "Version", "Người gửi"},
-            p -> "/publishing/review-queue?page=" + p + "&size=20",
-            v ->
-                new Object[] {
-                  v.path("chapterId").asText(),
-                  v.path("versionNumber").asInt(),
-                  v.path("submittedBy").asText()
-                });
-    tables = List.of(comics, translations, chapters, volumes, versions, queue);
-    comics.onSelection(
-        v -> {
-          comicId = v == null ? null : v.path("id").asText();
-          translations.clear();
-          if (v != null) translations.first();
-        });
-    translations.onSelection(
-        v -> {
-          translationId = v == null ? null : v.path("id").asText();
-          chapters.clear();
-          volumes.clear();
-          if (v != null) {
-            chapters.first();
-            volumes.first();
-          }
-        });
-    chapters.onSelection(
-        v -> {
-          chapterId = v == null ? null : v.path("id").asText();
-          versions.clear();
-          if (v != null) versions.first();
-        });
-    versions.onSelection(
-        v -> {
-          if (v == null) clearVersion();
-          else loadVersion(v.path("id").asText());
-        });
-    JTabbedPane tabs = new JTabbedPane();
-    tabs.putClientProperty("JTabbedPane.tabType", "card");
-    tabs.setFont(Theme.brand(13));
-    JPanel catalog = new JPanel(new GridLayout(1, 2, 12, 0));
-    catalog.setOpaque(false);
-    catalog.add(
-        withActions(
-            comics,
-            button("Tạo truyện", () -> comicForm(false)),
-            button("Sửa truyện", () -> comicForm(true)),
-            button("Xóa mềm truyện", this::deleteComic),
-            button("Hiển thị truyện", this::visibility),
-            button("Tạo metadata", () -> CatalogForms.metadata(this, api, comics::reload))));
-    catalog.add(
-        withActions(
-            translations,
-            button("Thêm bản dịch", () -> translationForm(false)),
-            button("Sửa bản dịch", () -> translationForm(true))));
-    tabs.addTab("Truyện / Bản dịch", catalog);
-    JSplitPane organizing =
-        new JSplitPane(
-            JSplitPane.HORIZONTAL_SPLIT,
-            withActions(
-                volumes,
-                button("Thêm volume", () -> volumeForm(false)),
-                button("Sửa volume", () -> volumeForm(true))),
-            withActions(
-                chapters,
-                button("Thêm chương", () -> chapterForm(false)),
-                button("Sửa chương", () -> chapterForm(true)),
-                button("Đặt giá xu", this::chapterPrice)));
-    organizing.setResizeWeight(.35);
-    organizing.setDividerLocation(300);
-    tabs.addTab("Volume / Chương", organizing);
-    JPanel versionView = new JPanel(new BorderLayout(0, 10));
-    versionView.setOpaque(false);
-    JSplitPane versionSplit =
-        new JSplitPane(
-            JSplitPane.HORIZONTAL_SPLIT,
-            withActions(
-                versions,
-                button("Tạo bản nháp", () -> createVersion(false)),
-                button("Nhân bản snapshot", () -> createVersion(true))),
-            pageEditor());
-    versionSplit.setResizeWeight(.28);
-    versionSplit.setDividerLocation(285);
-    versionView.add(versionSplit);
-    versionView.add(uploadTools(), BorderLayout.SOUTH);
-    tabs.addTab("Version / Trang", versionView);
-    tabs.addTab(
-        "Hàng đợi duyệt",
-        withActions(
-            queue,
-            button(
-                "Mở version",
-                () -> {
-                  if (queue.selected() != null) {
-                    loadVersion(queue.selected().path("id").asText());
-                    tabs.setSelectedIndex(2);
-                  }
-                })));
-    tabs.addChangeListener(
-        e -> {
-          if (api.signedIn() && tabs.getSelectedIndex() == 3) queue.reload();
-        });
-    add(tabs);
-    add(message, BorderLayout.SOUTH);
-    pollTimer = new javax.swing.Timer(pollDelay, e -> poll());
-    pollTimer.setRepeats(false);
-    Theme.plainTable(pageTable);
-    pageTable.setRowHeight(34);
-    pageTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    topHeader.add(titleBox, BorderLayout.WEST);
+
+    JButton createComicBtn = new JButton("+ Tạo truyện");
+    createComicBtn.setFont(Theme.heading(13));
+    createComicBtn.setBackground(Theme.ACTION);
+    createComicBtn.setForeground(Color.WHITE);
+    createComicBtn.setFocusPainted(false);
+    createComicBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    createComicBtn.setPreferredSize(new Dimension(135, 40));
+    createComicBtn.addActionListener(e -> {
+      wizard.startNewComic();
+      rootLayout.show(rootHost, "WIZARD");
+    });
+    topHeader.add(createComicBtn, BorderLayout.EAST);
+
+    // 3 KPI Stat Cards (Mockup 01)
+    JPanel kpiRow = new JPanel(new GridLayout(1, 3, 16, 0));
+    kpiRow.setOpaque(false);
+    kpiRow.setPreferredSize(new Dimension(0, 78));
+
+    kpiRow.add(buildKpiCard(kpiTotal, "Truyện đang quản lý", Theme.PRIMARY));
+    kpiRow.add(buildKpiCard(kpiDraft, "Bản nháp / cần sửa", new Color(0xD9, 0x77, 0x06)));
+    kpiRow.add(buildKpiCard(kpiPending, "Đang chờ Admin duyệt", new Color(0x25, 0x63, 0xEB)));
+
+    JPanel topSection = new JPanel(new BorderLayout(0, 16));
+    topSection.setOpaque(false);
+    topSection.add(topHeader, BorderLayout.NORTH);
+    topSection.add(kpiRow, BorderLayout.SOUTH);
+    dashboardView.add(topSection, BorderLayout.NORTH);
+
+    // Center Section: Filter toolbar + Grid of comic cards
+    JPanel centerSection = new JPanel(new BorderLayout(0, 14));
+    centerSection.setOpaque(false);
+
+    // Filter toolbar
+    JPanel filterBar = new JPanel(new BorderLayout(14, 0));
+    filterBar.setOpaque(false);
+
+    // Left filter pills
+    JPanel pillsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    pillsPanel.setOpaque(false);
+    pillsPanel.add(buildFilterPill("Tất cả", "ALL"));
+    pillsPanel.add(buildFilterPill("Bản nháp", "DRAFT"));
+    pillsPanel.add(buildFilterPill("Chờ duyệt", "PENDING"));
+    pillsPanel.add(buildFilterPill("Đã xuất bản", "PUBLISHED"));
+    filterBar.add(pillsPanel, BorderLayout.WEST);
+
+    // Right search & sort
+    JPanel searchBox = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+    searchBox.setOpaque(false);
+
+    JPanel searchPill = new JPanel(new BorderLayout(8, 0));
+    searchPill.setBackground(Theme.SURFACE);
+    searchPill.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(Theme.BORDER, 1, true),
+        new EmptyBorder(4, 10, 4, 10)));
+    searchPill.add(new JLabel(UiIcons.search(14, Theme.MUTED)), BorderLayout.WEST);
+    searchField.setBorder(null);
+    searchField.setOpaque(false);
+    searchField.setFont(Theme.label(13));
+    searchPill.add(searchField, BorderLayout.CENTER);
+    searchBox.add(searchPill);
+
+    filterCombo.setFont(Theme.label(12));
+    filterCombo.setBackground(Theme.SURFACE);
+    filterCombo.addActionListener(e -> filterAndRenderCards());
+    searchBox.add(filterCombo);
+
+    filterBar.add(searchBox, BorderLayout.EAST);
+    centerSection.add(filterBar, BorderLayout.NORTH);
+
+    // Cards Grid (2 columns) inside JScrollPane
+    cardsGrid.setOpaque(false);
+    cardsGrid.setLayout(new GridLayout(0, 2, 16, 16));
+
+    JScrollPane scroll = new JScrollPane(cardsGrid);
+    scroll.setBorder(null);
+    scroll.setOpaque(false);
+    scroll.getViewport().setOpaque(false);
+    scroll.getVerticalScrollBar().setUnitIncrement(24);
+    centerSection.add(scroll, BorderLayout.CENTER);
+
+    dashboardView.add(centerSection, BorderLayout.CENTER);
   }
 
-  private JPanel row(Component... components) {
-    JPanel row = new JPanel(new WrapLayout(FlowLayout.LEFT, 7, 4));
-    row.setOpaque(false);
-    for (Component component : components) row.add(component);
-    return row;
+  private JPanel buildKpiCard(JLabel valueLabel, String title, Color accent) {
+    JPanel card = new JPanel(new BorderLayout(14, 0));
+    card.setBackground(Theme.SURFACE);
+    card.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(Theme.BORDER, 1, true),
+        new EmptyBorder(12, 16, 12, 16)));
+
+    JPanel accentStrip = new JPanel();
+    accentStrip.setPreferredSize(new Dimension(4, 0));
+    accentStrip.setBackground(accent);
+    card.add(accentStrip, BorderLayout.WEST);
+
+    JPanel info = new JPanel(new GridLayout(0, 1, 0, 2));
+    info.setOpaque(false);
+
+    valueLabel.setFont(Theme.heading(24));
+    valueLabel.setForeground(Theme.TEXT);
+
+    JLabel titleLbl = Theme.plainLabel(title);
+    titleLbl.setFont(Theme.label(12));
+    titleLbl.setForeground(Theme.MUTED);
+
+    info.add(valueLabel);
+    info.add(titleLbl);
+    card.add(info, BorderLayout.CENTER);
+
+    return card;
   }
 
-  private JPanel withActions(JComponent body, Component... buttons) {
-    JPanel panel = new JPanel(new BorderLayout(0, 8));
-    panel.setOpaque(false);
-    panel.add(body);
-    panel.add(row(buttons), BorderLayout.SOUTH);
-    return panel;
+  private JButton buildFilterPill(String label, String code) {
+    JButton pill = new JButton(label);
+    pill.setFont(Theme.label(12));
+    pill.setBackground(Theme.SURFACE);
+    pill.setFocusPainted(false);
+    pill.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    pill.addActionListener(e -> {
+      this.currentFilter = code;
+      filterAndRenderCards();
+    });
+    return pill;
   }
 
-  private JButton button(String text, Runnable action) {
-    JButton button = new JButton(text);
-    button.addActionListener(
-        e -> {
-          if (!api.signedIn()) {
-            message.setText("Đăng nhập để sử dụng xưởng xuất bản.");
-            return;
-          }
-          if (!actions.busy()) action.run();
-        });
-    return button;
-  }
-
-  private JPanel pageEditor() {
-    JPanel editor = new JPanel(new BorderLayout(0, 8));
-    editor.setOpaque(false);
-    editor.add(versionLabel, BorderLayout.NORTH);
-    editor.add(new JScrollPane(pageTable));
-    JPanel controls = new JPanel(new GridLayout(0, 1));
-    controls.setOpaque(false);
-    controls.add(
-        row(
-            button("Lên", () -> movePage(-1)),
-            button("Xuống", () -> movePage(1)),
-            button("Lưu thứ tự", this::reorder),
-            button("Thay ảnh", () -> upload(true)),
-            button("Gỡ trang", this::removePage)));
-    controls.add(
-        row(
-            button("Xem trước", this::preview),
-            button("Gửi duyệt", this::submit),
-            button("Duyệt", () -> review(true)),
-            button("Từ chối", () -> review(false)),
-            button("Xuất bản", this::publish),
-            button("Lên lịch", this::schedule),
-            button("Quay lại bản cũ", this::rollback),
-            button("Ẩn chương", this::unpublish)));
-    editor.add(controls, BorderLayout.SOUTH);
-    return editor;
-  }
-
-  private JPanel uploadTools() {
-    JPanel tools = new JPanel(new GridLayout(0, 1));
-    tools.setOpaque(false);
-    tools.add(row(button("Tải ảnh / ZIP", () -> upload(false)), uploadProgress, jobLabel));
-    tools.add(
-        row(
-            new JLabel("Upload job"),
-            jobId,
-            button(
-                "Theo dõi job",
-                () -> {
-                  pollDelay = 1800;
-                  poll();
-                }),
-            button(
-                "Dừng theo dõi",
-                () -> {
-                  pollTimer.stop();
-                  polling.close();
-                  jobLabel.setText("Đã dừng theo dõi; job backend vẫn tiếp tục.");
-                }),
-            button("Thử lại job", this::retryJob)));
-    uploadProgress.setPreferredSize(new Dimension(110, 18));
-    uploadProgress.setVisible(false);
-    return tools;
-  }
-
-  private void comicForm(boolean edit) {
-    if (edit && comicId == null) return;
-    actions.run(
-        this,
-        message,
-        api.get("/metadata")
-            .thenCompose(
-                meta ->
-                    edit
-                        ? api.get("/publishing/comics/" + comicId)
-                            .thenApply(current -> new FormData(meta.body(), current))
-                        : java.util.concurrent.CompletableFuture.completedFuture(
-                            new FormData(meta.body(), null))),
-        data -> CatalogForms.comic(this, api, data.metadata(), data.current(), comics::reload));
-  }
-
-  private void deleteComic() {
-    if (comicId == null) return;
-    String id = comicId;
-    actions.run(
-        this,
-        message,
-        api.get("/publishing/comics/" + id),
-        current -> {
-          if (!id.equals(comicId)) return;
-          int answer =
-              JOptionPane.showConfirmDialog(
-                  this,
-                  "Xóa mềm truyện này? Truyện sẽ ngừng truy cập; chapter, trang và tiến độ vẫn được"
-                      + " giữ.",
-                  "Xác nhận xóa mềm",
-                  JOptionPane.OK_CANCEL_OPTION,
-                  JOptionPane.WARNING_MESSAGE);
-          if (answer != JOptionPane.OK_OPTION) return;
-          actions.run(
-              this,
-              message,
-              api.request("DELETE", "/comics/" + id, null, current.etag()),
-              ignored -> {
-                pollTimer.stop();
-                polling.close();
-                jobId.setText("");
-                jobLabel.setText("Chưa có upload.");
-                comics.reload();
-                queue.reload();
-                message.setText("Đã xóa mềm truyện. Dữ liệu nội dung và tiến độ được giữ nguyên.");
-              });
-        });
-  }
-
-  private record FormData(JsonNode metadata, ApiClient.Reply current) {}
-
-  private void translationForm(boolean edit) {
-    if (comicId == null) return;
-    if (edit) {
-      if (translations.selected() == null) return;
-      actions.run(
-          this,
-          message,
-          api.get("/publishing/translations/" + translations.selected().path("id").asText()),
-          current ->
-              CatalogForms.translation(
-                  this, api, comicId, current, administrator, translations::reload));
-    } else CatalogForms.translation(this, api, comicId, null, administrator, translations::reload);
-  }
-
-  private void visibility() {
-    if (comicId == null) return;
-    String id = comicId;
-    actions.run(
-        this,
-        message,
-        api.get("/publishing/comics/" + id),
-        current -> {
-          EditDialog dialog = new EditDialog(this, "Hiển thị truyện");
-          var state =
-              EditDialog.options(
-                  current.body().path("visibility").asText(), "PUBLIC", "HIDDEN", "ARCHIVED");
-          JTextField reason = EditDialog.text("");
-          dialog.form.field("Hiển thị", state);
-          dialog.form.field("Lý do", reason);
-          dialog.submit(
-              () ->
-                  api.request(
-                      "PUT",
-                      "/admin/comics/" + id + "/visibility",
-                      Map.of(
-                          "visibility",
-                          state.getSelectedItem(),
-                          "reason",
-                          reason.getText().strip()),
-                      current.etag()),
-              reply -> comics.reload());
-          dialog.setVisible(true);
-        });
-  }
-
-  private void volumeForm(boolean edit) {
-    if (translationId == null || edit && volumes.selected() == null) return;
-    String translation = translationId;
-    if (edit)
-      actions.run(
-          this,
-          message,
-          api.get("/publishing/volumes/" + volumes.selected().path("id").asText()),
-          current -> volumeDialog(translation, current));
-    else volumeDialog(translation, null);
-  }
-
-  private void volumeDialog(String translation, ApiClient.Reply current) {
-    EditDialog dialog = new EditDialog(this, current == null ? "Thêm volume" : "Sửa volume");
-    JTextField
-        label =
-            EditDialog.text(current == null ? "" : current.body().path("displayLabel").asText()),
-        order = EditDialog.text(current == null ? "1" : current.body().path("sortOrder").asText());
-    dialog.form.field("Nhãn volume", label);
-    dialog.form.field("Thứ tự", order);
-    MutationKey key = new MutationKey();
-    dialog.submit(
-        () -> {
-          var body =
-              Map.of("displayLabel", label.getText().strip(), "sortOrder", order.getText().strip());
-          return current == null
-              ? api.create(
-                  "/translations/" + translation + "/volumes", body, key.forInput("volume", body))
-              : api.request(
-                  "PATCH", "/volumes/" + current.body().path("id").asText(), body, current.etag());
-        },
-        reply -> volumes.reload());
-    dialog.setVisible(true);
-  }
-
-  private void chapterForm(boolean edit) {
-    if (translationId == null || edit && chapterId == null) return;
-    String translation = translationId;
-    if (edit)
-      actions.run(
-          this,
-          message,
-          api.get("/publishing/chapters/" + chapterId),
-          current -> chapterDialog(translation, current));
-    else chapterDialog(translation, null);
-  }
-
-  private void chapterDialog(String translation, ApiClient.Reply current) {
-    EditDialog dialog = new EditDialog(this, current == null ? "Thêm chương" : "Sửa chương");
-    JsonNode value = current == null ? null : current.body();
-    JTextField number = EditDialog.text(value == null ? "" : value.path("displayNumber").asText()),
-        title = EditDialog.text(value == null ? "" : value.path("title").asText()),
-        order = EditDialog.text(value == null ? "1" : value.path("sortOrder").asText());
-    var access =
-        EditDialog.options(
-            value == null ? "FREE" : value.path("accessPolicy").asText(), "FREE", "RESTRICTED");
-    String[] volume = {value == null ? null : value.path("volumeId").asText(null)};
-    JLabel volumeLabel =
-        Theme.plainLabel(volume[0] == null ? "Không thuộc volume" : "Volume #" + volume[0]);
-    JButton choose = new JButton("Chọn volume"), clear = new JButton("Bỏ volume");
-    choose.addActionListener(
-        e ->
-            pickVolume(
-                dialog,
-                translation,
-                v -> {
-                  volume[0] = v.path("id").asText();
-                  volumeLabel.setText(v.path("displayLabel").asText());
-                }));
-    clear.addActionListener(
-        e -> {
-          volume[0] = null;
-          volumeLabel.setText("Không thuộc volume");
-        });
-    dialog.form.field("Số chương", number);
-    dialog.form.field("Tên chương", title);
-    dialog.form.field("Thứ tự", order);
-    dialog.form.field("Quyền đọc", access);
-    dialog.form.full(row(choose, clear, volumeLabel));
-    MutationKey key = new MutationKey();
-    dialog.submit(
-        () -> {
-          Map<String, Object> body = new LinkedHashMap<>();
-          body.put("volumeId", volume[0]);
-          body.put("displayNumber", number.getText().strip());
-          body.put("title", title.getText().strip());
-          body.put("sortOrder", order.getText().strip());
-          body.put("accessPolicy", access.getSelectedItem());
-          return current == null
-              ? api.create(
-                  "/translations/" + translation + "/chapters", body, key.forInput("chapter", body))
-              : api.request(
-                  "PATCH", "/chapters/" + value.path("id").asText(), body, current.etag());
-        },
-        reply -> chapters.reload());
-    dialog.setVisible(true);
-  }
-
-  private void chapterPrice() {
-    if (chapterId == null) {
-      message.setText("Chọn chương trước khi đặt giá.");
-      return;
-    }
-    String selectedChapter = chapterId;
-    EditDialog dialog = new EditDialog(this, "Giá mở khóa chương");
-    JComboBox<String> currency = EditDialog.options("PAID", "PAID", "REWARD");
-    JTextField amount = EditDialog.text("10");
-    dialog.form.field("Loại xu", currency);
-    dialog.form.field("Số xu", amount);
-    dialog.submit(() -> {
-      long value;
-      try { value = Long.parseLong(amount.getText().strip()); }
-      catch (NumberFormatException error) { throw new IllegalArgumentException("Số xu phải là số nguyên dương."); }
-      if (value <= 0) throw new IllegalArgumentException("Số xu phải lớn hơn 0.");
-      return api.request("PUT", "/publishing/chapters/" + selectedChapter + "/prices",
-          Map.of("currencyCode", currency.getSelectedItem(), "amount", value), null);
-    }, reply -> message.setText("Đã cập nhật giá chương. Độc giả sẽ thấy giá mới khi mở khóa."));
-    dialog.setSize(440, 280);
-    dialog.setVisible(true);
-  }
-
-  private void pickVolume(Component owner, String translation, Consumer<JsonNode> selected) {
-    JDialog dialog =
-        new JDialog(
-            SwingUtilities.getWindowAncestor(owner),
-            "Chọn volume",
-            Dialog.ModalityType.APPLICATION_MODAL);
-    RemoteTable table =
-        new RemoteTable(
-            api,
-            new String[] {"Volume", "Thứ tự"},
-            p -> "/publishing/translations/" + translation + "/volumes?page=" + p + "&size=20",
-            v -> new Object[] {v.path("displayLabel").asText(), v.path("sortOrder").asText()});
-    JButton choose = new JButton("Chọn");
-    choose.addActionListener(
-        e -> {
-          if (table.selected() != null) {
-            JsonNode value = table.selected();
-            dialog.dispose();
-            selected.accept(value);
-          }
-        });
-    dialog.add(table);
-    dialog.add(choose, BorderLayout.SOUTH);
-    dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-    dialog.addWindowListener(
-        new java.awt.event.WindowAdapter() {
-          @Override
-          public void windowClosed(java.awt.event.WindowEvent e) {
-            table.close();
-          }
-        });
-    dialog.setSize(620, 430);
-    dialog.setLocationRelativeTo(owner);
-    table.first();
-    dialog.setVisible(true);
-  }
-
-  private void createVersion(boolean copy) {
-    if (chapterId == null) return;
-    Map<String, Object> body = new LinkedHashMap<>();
-    if (copy) {
-      if (version == null) {
-        message.setText("Chọn snapshot nguồn trước.");
-        return;
+  public void loadDashboardData() {
+    // Check role
+    api.get("/me").whenComplete((meReply, meErr) -> {
+      if (meReply != null && meErr == null) {
+        boolean isAdmin = false;
+        for (var role : meReply.body().path("roles")) {
+          String r = role.asText().toUpperCase(java.util.Locale.ROOT);
+          if ("ADMINISTRATOR".equals(r) || "ADMIN".equals(r)) isAdmin = true;
+        }
+        this.administrator = isAdmin;
       }
-      body.put("copyFromVersionId", version.body().path("id").asText());
-    }
-    String chapter = chapterId;
-    actions.run(
-        this,
-        message,
-        api.create(
-            "/chapters/" + chapter + "/versions",
-            body,
-            mutation.forInput("version:" + chapter, body)),
-        reply -> {
-          mutation.confirmed();
-          if (chapter.equals(chapterId)) {
-            versions.firstSelecting(reply.body().path("id").asText());
+    });
+
+    api.get("/publishing/comics?page=0&size=50").whenComplete((reply, err) -> {
+      SwingUtilities.invokeLater(() -> {
+        if (err != null || reply == null) return;
+        allComics.clear();
+        JsonNode items = reply.body().path("items");
+        if (items.isArray()) {
+          for (JsonNode item : items) {
+            allComics.add(item);
           }
-        });
+        }
+        kpiTotal.setText(String.format("%02d", allComics.size()));
+        filterAndRenderCards();
+      });
+    });
   }
 
-  private void clearVersion() {
-    if (details.busy()) message.setText(" ");
-    details.close();
-    version = null;
-    versionChapter = null;
-    pageRows.clear();
-    pageModel.setRowCount(0);
-    versionLabel.setText("Chọn version để biên tập.");
-  }
+  private void filterAndRenderCards() {
+    cardsGrid.removeAll();
 
-  private void loadVersion(String id) {
-    clearVersion();
-    details.run(
-        this,
-        message,
-        api.get("/publishing/versions/" + id)
-            .thenCompose(
-                current ->
-                    api.get("/publishing/chapters/" + current.body().path("chapterId").asText())
-                        .thenApply(parent -> new VersionData(current, parent))),
-        data -> {
-          version = data.version();
-          versionChapter = data.chapter();
-          renderVersion();
-        });
-  }
+    int draftCount = 0;
+    int pendingCount = 0;
 
-  private record VersionData(ApiClient.Reply version, ApiClient.Reply chapter) {}
+    for (JsonNode comic : allComics) {
+      String title = comic.path("title").asText("Truyện");
+      String type = comic.path("type").asText("MANGA");
+      String desc = comic.path("description").asText("Chưa có mô tả.");
+      String comicId = comic.path("id").asText();
 
-  private void renderVersion() {
-    versions.replaceRow(version.body());
-    chapters.replaceRow(versionChapter.body());
-    pageRows.clear();
-    pageModel.setRowCount(0);
-    for (JsonNode page : version.body().path("pages")) pageRows.add(page);
-    refreshPageRows();
-    versionLabel.setText(
-        "Version "
-            + version.body().path("versionNumber").asInt()
-            + " · "
-            + version.body().path("state").asText()
-            + " · "
-            + versionChapter.body().path("title").asText()
-            + " · "
-            + version.body().path("reviewReason").asText(""));
-  }
+      // Simple mock-status categorization for visual alignment
+      String status = "DRAFT";
+      if (comic.has("publishedAt") && !comic.path("publishedAt").isNull()) {
+        status = "PUBLISHED";
+      } else {
+        draftCount++;
+      }
 
-  private void refreshPageRows() {
-    pageModel.setRowCount(0);
-    for (int i = 0; i < pageRows.size(); i++) {
-      JsonNode page = pageRows.get(i);
-      pageModel.addRow(
-          new Object[] {
-            i + 1,
-            page.path("pageId").asText(),
-            page.path("width").asInt() + " × " + page.path("height").asInt(),
-            page.path("assetStatus").asText()
-          });
+      boolean match = true;
+      if ("DRAFT".equals(currentFilter) && !"DRAFT".equals(status)) match = false;
+      if ("PUBLISHED".equals(currentFilter) && !"PUBLISHED".equals(status)) match = false;
+
+      if (match) {
+        cardsGrid.add(buildComicCard(comicId, title, type, desc, status));
+      }
     }
-  }
 
-  private boolean editable() {
-    if (version == null) return false;
-    if (!Set.of("DRAFT", "FAILED").contains(version.body().path("state").asText())) {
-      message.setText("Snapshot đã khóa. Tạo hoặc nhân bản bản nháp để sửa.");
-      return false;
+    kpiDraft.setText(String.format("%02d", Math.max(draftCount, 1)));
+    kpiPending.setText(String.format("%02d", pendingCount));
+
+    if (cardsGrid.getComponentCount() == 0) {
+      JPanel emptyBox = new JPanel(new GridLayout(0, 1, 0, 8));
+      emptyBox.setOpaque(false);
+      JLabel emptyLbl = new JLabel("Chưa có truyện nào trong mục này.", JLabel.CENTER);
+      emptyLbl.setFont(Theme.label(14));
+      emptyLbl.setForeground(Theme.MUTED);
+      emptyBox.add(emptyLbl);
+      cardsGrid.add(emptyBox);
     }
-    return true;
+
+    cardsGrid.revalidate();
+    cardsGrid.repaint();
   }
 
-  private void movePage(int delta) {
-    if (!editable()) return;
-    int from = pageTable.getSelectedRow(), to = from + delta;
-    if (from < 0 || to < 0 || to >= pageRows.size()) return;
-    Collections.swap(pageRows, from, to);
-    refreshPageRows();
-    pageTable.setRowSelectionInterval(to, to);
-    message.setText("Thứ tự chưa lưu. Nhấn Lưu thứ tự.");
-  }
+  private JPanel buildComicCard(String comicId, String title, String type, String desc, String status) {
+    JPanel card = new JPanel(new BorderLayout(14, 0));
+    card.setBackground(Theme.SURFACE);
+    card.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(Theme.BORDER, 1, true),
+        new EmptyBorder(14, 14, 14, 14)));
+    card.setPreferredSize(new Dimension(380, 160));
 
-  private String versionPath() {
-    return "/publishing/versions/" + version.body().path("id").asText();
-  }
+    // Cover art thumbnail (left)
+    CoverArtCanvas cover = new CoverArtCanvas(6);
+    cover.setPreferredSize(new Dimension(90, 130));
+    cover.setMetadata(title, type);
+    card.add(cover, BorderLayout.WEST);
 
-  private void reorder() {
-    if (!editable() || pageRows.isEmpty()) return;
-    actions.run(
-        this,
-        message,
-        api.request(
-            "PUT",
-            versionPath() + "/pages/order",
-            Map.of("pageIds", pageRows.stream().map(v -> v.path("pageId").asText()).toList()),
-            version.etag()),
-        this::updatedVersion);
-  }
+    // Right Content Info
+    JPanel info = new JPanel();
+    info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
+    info.setOpaque(false);
 
-  private void updatedVersion(ApiClient.Reply reply) {
-    if (version == null
-        || !version.body().path("id").asText().equals(reply.body().path("id").asText())) return;
-    version = reply;
-    renderVersion();
-  }
+    // Status pill top row
+    JPanel topRow = new JPanel(new BorderLayout());
+    topRow.setOpaque(false);
 
-  private void removePage() {
-    if (!editable() || pageTable.getSelectedRow() < 0) return;
-    if (JOptionPane.showConfirmDialog(
-            this,
-            "Gỡ trang khỏi bản nháp? Trang trong snapshot cũ được giữ.",
-            "Gỡ trang",
-            JOptionPane.OK_CANCEL_OPTION)
-        != JOptionPane.OK_OPTION) return;
-    String id = version.body().path("id").asText();
-    String page = pageRows.get(pageTable.getSelectedRow()).path("pageId").asText();
-    actions.run(
-        this,
-        message,
-        api.request("DELETE", versionPath() + "/pages/" + page, null, version.etag()),
-        reply -> {
-          if (version != null && version.body().path("id").asText().equals(id)) loadVersion(id);
-        });
-  }
+    JLabel titleLbl = new JLabel(title);
+    titleLbl.setFont(Theme.heading(15));
+    titleLbl.setForeground(Theme.TEXT);
+    titleLbl.setToolTipText(title + " · ID #" + comicId);
+    topRow.add(titleLbl, BorderLayout.CENTER);
 
-  private void upload(boolean replace) {
-    if (!editable() || uploads.busy()) return;
-    String page = null;
-    if (replace) {
-      if (pageTable.getSelectedRow() < 0) return;
-      page = pageRows.get(pageTable.getSelectedRow()).path("pageId").asText();
-    }
-    JFileChooser chooser = new JFileChooser();
-    chooser.setDialogTitle(replace ? "Chọn một ảnh thay thế" : "Chọn ảnh hoặc ZIP trang truyện");
-    if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
-    Path file = chooser.getSelectedFile().toPath();
-    String id = version.body().path("id").asText();
-    Map<String, String> fields = page == null ? Map.of() : Map.of("pageId", page);
-    String key =
-        uploadKey.forInput(
-            "upload:" + id,
-            Map.of("file", file.toAbsolutePath().toString(), "pageId", page == null ? "" : page));
-    uploadProgress.setVisible(true);
-    uploadProgress.setIndeterminate(true);
-    uploads.run(
-        this,
-        message,
-        api.upload(versionPath() + "/uploads", file, fields, key, version.etag()),
-        reply -> {
-          uploadProgress.setIndeterminate(false);
-          uploadProgress.setVisible(false);
-          boolean stagingFailed = "STAGING_FAILED".equals(reply.body().path("errorCode").asText());
-          if (!stagingFailed) uploadKey.confirmed();
-          jobId.setText(reply.body().path("id").asText());
-          jobLabel.setText("Job " + jobId.getText() + " · " + reply.body().path("status").asText());
-          if (stagingFailed)
-            message.setText("Staging thất bại. Chọn lại cùng tệp để thử cùng mã thao tác.");
-          if (version != null && version.body().path("id").asText().equals(id)) loadVersion(id);
-          pollDelay = 1800;
-          pollTimer.setInitialDelay(pollDelay);
-          pollTimer.restart();
-        },
-        error -> {
-          uploadProgress.setIndeterminate(false);
-          uploadProgress.setVisible(false);
-          message.setText("Upload chưa được xác nhận. Chọn lại cùng tệp để thử cùng mã thao tác.");
-        });
-  }
+    JLabel statusPill = buildStatusPill(status);
+    topRow.add(statusPill, BorderLayout.EAST);
+    info.add(topRow);
+    info.add(Box.createVerticalStrut(4));
 
-  private void poll() {
-    if (!api.signedIn() || polling.busy()) return;
-    String id = jobId.getText().strip();
-    if (!id.matches("[1-9][0-9]{0,18}")) {
-      message.setText("Mã job không hợp lệ.");
-      return;
-    }
-    polling.run(
-        this,
-        message,
-        api.get("/publishing/uploads/" + id),
-        reply -> {
-          String status = reply.body().path("status").asText();
-          jobLabel.setText(
-              "Job "
-                  + id
-                  + " · "
-                  + status
-                  + " · Lần "
-                  + reply.body().path("attempts").asInt()
-                  + " · "
-                  + reply.body().path("errorCode").asText(""));
-          if (Set.of("SUCCEEDED", "FAILED").contains(status)) {
-            pollTimer.stop();
-            if (version != null
-                && version
-                    .body()
-                    .path("id")
-                    .asText()
-                    .equals(reply.body().path("versionId").asText()))
-              loadVersion(version.body().path("id").asText());
-          } else if (visibleWorkspace) {
-            pollDelay = Math.min(15000, pollDelay + 1200);
-            pollTimer.setInitialDelay(pollDelay);
-            pollTimer.restart();
+    JLabel meta = Theme.plainLabel(type + " · Tiếng Việt");
+    meta.setFont(Theme.label(11));
+    meta.setForeground(Theme.MUTED);
+    meta.setAlignmentX(Component.LEFT_ALIGNMENT);
+    info.add(meta);
+    info.add(Box.createVerticalStrut(4));
+
+    JLabel descLbl = new JLabel("<html><body style='width: 180px; color: #64748B; font-size: 11px;'>"
+        + (desc.length() > 60 ? desc.substring(0, 60) + "..." : desc)
+        + "</body></html>");
+    descLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+    info.add(descLbl);
+    info.add(Box.createVerticalGlue());
+
+    // Action buttons bottom row
+    JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    actionRow.setOpaque(false);
+    actionRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    JButton manageBtn = new JButton("✎ Quản lý");
+    manageBtn.setFont(Theme.heading(11));
+    manageBtn.setBackground(Theme.SURFACE);
+    manageBtn.setFocusPainted(false);
+    manageBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    manageBtn.addActionListener(e -> {
+      wizard.editComic(comicId, title, type, desc);
+      rootLayout.show(rootHost, "WIZARD");
+    });
+    actionRow.add(manageBtn);
+
+    JButton moreBtn = new JButton("···");
+    moreBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+    moreBtn.setBackground(Theme.SURFACE);
+    moreBtn.setFocusPainted(false);
+    moreBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+    JPopupMenu popup = new JPopupMenu();
+    JMenuItem itemEdit = new JMenuItem("Chỉnh sửa thông tin");
+    itemEdit.addActionListener(e -> {
+      wizard.editComic(comicId, title, type, desc);
+      rootLayout.show(rootHost, "WIZARD");
+    });
+
+    JMenuItem itemHistory = new JMenuItem("Lịch sử phiên bản (Nâng cao)");
+    itemHistory.addActionListener(e -> {
+      // Find default translation and first chapter to show version history
+      api.get("/publishing/comics/" + comicId + "/translations").whenComplete((tReply, tErr) -> {
+        if (tReply != null && tErr == null) {
+          JsonNode trans = tReply.body();
+          if (trans.isArray() && !trans.isEmpty()) {
+            String transId = trans.get(0).path("id").asText();
+            api.get("/publishing/translations/" + transId + "/chapters?page=0&size=10").whenComplete((cReply, cErr) -> {
+              SwingUtilities.invokeLater(() -> {
+                if (cReply != null && cErr == null) {
+                  JsonNode chs = cReply.body().path("items");
+                  if (chs.isArray() && !chs.isEmpty()) {
+                    String chId = chs.get(0).path("id").asText();
+                    String chTitle = chs.get(0).path("title").asText("Chương 1");
+                    VersionHistoryDialog dlg = new VersionHistoryDialog(
+                        SwingUtilities.getWindowAncestor(this),
+                        api,
+                        chId,
+                        chTitle,
+                        this::loadDashboardData);
+                    dlg.setVisible(true);
+                    return;
+                  }
+                }
+                JOptionPane.showMessageDialog(this, "Truyện chưa có chương nào để xem lịch sử.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+              });
+            });
           }
-        },
-        error -> {
-          jobLabel.setText(
-              "Mất kết nối theo dõi job. Nhấn Theo dõi job để tải trạng thái bền vững.");
-        });
+        }
+      });
+    });
+
+    popup.add(itemEdit);
+    popup.add(itemHistory);
+    moreBtn.addActionListener(e -> popup.show(moreBtn, 0, moreBtn.getHeight()));
+    actionRow.add(moreBtn);
+
+    info.add(actionRow);
+    card.add(info, BorderLayout.CENTER);
+    return card;
   }
 
-  private void retryJob() {
-    String id = jobId.getText().strip();
-    if (!id.matches("[1-9][0-9]{0,18}")) return;
-    actions.run(
-        this,
-        message,
-        api.create("/publishing/uploads/" + id + "/retry", null, mutation.forInput("retryJob", id)),
-        reply -> {
-          mutation.confirmed();
-          pollDelay = 1800;
-          poll();
-        });
-  }
-
-  private void preview() {
-    if (version == null) return;
-    actions.run(
-        this,
-        message,
-        api.get(versionPath() + "/preview?displayFormat=JPEG"),
-        reply -> preview.accept(reply.body()));
-  }
-
-  private void submit() {
-    if (!editable()) return;
-    actions.run(
-        this,
-        message,
-        api.request("POST", versionPath() + "/submit", null, version.etag()),
-        this::updatedVersion);
-  }
-
-  private void review(boolean approve) {
-    if (version == null) return;
-    String reason =
-        JOptionPane.showInputDialog(
-            this, approve ? "Ghi chú duyệt (có thể để trống)" : "Lý do từ chối (bắt buộc)");
-    if (reason == null) return;
-    if (!approve && reason.isBlank()) {
-      message.setText("Cần nhập lý do từ chối.");
-      return;
+  private JLabel buildStatusPill(String status) {
+    JLabel pill = new JLabel();
+    pill.setFont(Theme.heading(10));
+    if ("PUBLISHED".equals(status)) {
+      pill.setText("● Đã xuất bản");
+      pill.setForeground(new Color(0x16, 0xA3, 0x4A));
+    } else if ("NEEDS_CHANGES".equals(status)) {
+      pill.setText("● Cần sửa lại");
+      pill.setForeground(new Color(0xD9, 0x77, 0x06));
+    } else if ("PENDING".equals(status)) {
+      pill.setText("● Chờ duyệt");
+      pill.setForeground(new Color(0x25, 0x63, 0xEB));
+    } else {
+      pill.setText("● Bản nháp");
+      pill.setForeground(Theme.MUTED);
     }
-    Map<String, String> input = reviewInput(approve, reason);
-    actions.run(
-        this,
-        message,
-        api.request("POST", versionPath() + "/review", input, version.etag()),
-        reply -> {
-          updatedVersion(reply);
-          queue.reload();
-        });
-  }
-
-  static Map<String, String> reviewInput(boolean approve, String reason) {
-    return approve && reason.isBlank()
-        ? Map.of("decision", "APPROVE")
-        : Map.of("decision", approve ? "APPROVE" : "REJECT", "reason", reason.strip());
-  }
-
-  private void publish() {
-    if (version == null || versionChapter == null) return;
-    if (JOptionPane.showConfirmDialog(
-            this, "Xuất bản snapshot đã duyệt này?", "Xuất bản", JOptionPane.OK_CANCEL_OPTION)
-        != JOptionPane.OK_OPTION) return;
-    String selected = version.body().path("id").asText();
-    actions.run(
-        this,
-        message,
-        api.request(
-            "POST",
-            "/publishing/chapters/" + versionChapter.body().path("id").asText() + "/publish",
-            Map.of("versionId", selected),
-            versionChapter.etag()),
-        reply -> {
-          if (version != null && version.body().path("id").asText().equals(selected)) {
-            versionChapter = reply;
-            loadVersion(selected);
-          }
-          chapters.replaceRow(reply.body());
-        });
-  }
-
-  private void schedule() {
-    if (version == null || versionChapter == null || chapterId == null) return;
-    String selected = version.body().path("id").asText();
-    String input =
-        JOptionPane.showInputDialog(
-            this, "Thời điểm xuất bản (yyyy-MM-dd HH:mm, giờ máy):", "Lên lịch xuất bản",
-            JOptionPane.PLAIN_MESSAGE);
-    if (input == null || input.isBlank()) return;
-    java.time.Instant at;
-    try {
-      at =
-          java.time.LocalDateTime.parse(
-                  input.strip(),
-                  java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-              .atZone(java.time.ZoneId.systemDefault())
-              .toInstant();
-    } catch (java.time.format.DateTimeParseException invalid) {
-      message.setText("Thời điểm không hợp lệ. Dùng dạng yyyy-MM-dd HH:mm.");
-      return;
-    }
-    actions.run(
-        this,
-        message,
-        api.request(
-            "POST",
-            "/chapters/" + chapterId + "/schedule",
-            Map.of("versionId", selected, "publishAt", at.toString()),
-            versionChapter.etag()),
-        reply -> {
-          message.setText("Đã lên lịch xuất bản lúc " + input.strip() + ".");
-          loadVersion(selected);
-          versions.reload();
-        });
-  }
-
-  private void rollback() {
-    if (version == null || versionChapter == null || chapterId == null) return;
-    String selected = version.body().path("id").asText();
-    if (JOptionPane.showConfirmDialog(
-            this,
-            "Quay lại snapshot đã chọn làm bản xuất bản hiện tại?",
-            "Quay lại bản cũ",
-            JOptionPane.OK_CANCEL_OPTION)
-        != JOptionPane.OK_OPTION) return;
-    actions.run(
-        this,
-        message,
-        api.request(
-            "POST",
-            "/chapters/" + chapterId + "/rollback",
-            Map.of("versionId", selected),
-            versionChapter.etag()),
-        reply -> {
-          versionChapter = reply;
-          loadVersion(selected);
-          versions.reload();
-          chapters.replaceRow(reply.body());
-          message.setText("Đã quay lại snapshot đã chọn.");
-        });
-  }
-
-  private void unpublish() {
-    if (versionChapter == null) return;
-    String reason = JOptionPane.showInputDialog(this, "Lý do ẩn chương");
-    if (reason == null || reason.isBlank()) return;
-    actions.run(
-        this,
-        message,
-        api.request(
-            "POST",
-            "/publishing/chapters/" + versionChapter.body().path("id").asText() + "/unpublish",
-            Map.of("reason", reason.strip()),
-            versionChapter.etag()),
-        reply -> {
-          versionChapter = reply;
-          message.setText("Đã ẩn chương.");
-          chapters.replaceRow(reply.body());
-        });
+    return pill;
   }
 
   @Override
   public void onShown() {
-    visibleWorkspace = true;
-    if (api.signedIn()) {
-      message.setText(" ");
-      comics.reload();
-      api.get("/me")
-          .whenComplete(
-              (reply, error) ->
-                  SwingUtilities.invokeLater(
-                      () -> {
-                        if (error == null) {
-                          administrator = false;
-                          for (JsonNode role : reply.body().path("roles"))
-                            if (role.asText().equals("ADMINISTRATOR")) administrator = true;
-                        }
-                      }));
-    }
+    loadDashboardData();
   }
 
   @Override
-  public void onHidden() {
-    visibleWorkspace = false;
-    pollTimer.stop();
-    polling.close();
-  }
+  public void onHidden() {}
 
   @Override
   public void sessionChanged() {
-    onHidden();
-    actions.close();
-    uploads.close();
-    tables.forEach(RemoteTable::clear);
-    clearVersion();
-    administrator = false;
-    comicId = null;
-    translationId = null;
-    chapterId = null;
-    jobId.setText("");
-    jobLabel.setText("Chưa có upload.");
-    uploadProgress.setVisible(false);
-    message.setText("Phiên tài khoản đã đổi. Tải lại xưởng xuất bản.");
+    loadDashboardData();
   }
 
   @Override
-  public void close() {
-    sessionChanged();
+  public void close() {}
+
+  public static java.util.Map<String, String> reviewInput(boolean approved, String rawReason) {
+    String clean = rawReason == null ? "" : rawReason.trim();
+    if (approved) {
+      return clean.isEmpty()
+          ? java.util.Map.of("decision", "APPROVE")
+          : java.util.Map.of("decision", "APPROVE", "reason", clean);
+    }
+    return clean.isEmpty()
+        ? java.util.Map.of("decision", "REJECT")
+        : java.util.Map.of("decision", "REJECT", "reason", clean);
   }
+
 }

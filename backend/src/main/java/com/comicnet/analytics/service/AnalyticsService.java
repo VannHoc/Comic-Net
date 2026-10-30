@@ -26,7 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AnalyticsService {
   private static final int HOURLY_READ_LIMIT = 150;
   private static final int STATS_WINDOW_DAYS = 30;
-  private static final Set<String> PERIODS = Set.of("DAILY", "WEEKLY", "MONTHLY", "TRENDING");
+  private static final Set<String> PERIODS = Set.of("DAILY", "WEEKLY", "MONTHLY", "TRENDING", "RATING");
 
   private final JdbcTemplate jdbc;
   private final CatalogAccess catalog;
@@ -215,18 +215,20 @@ public class AnalyticsService {
       throw new DomainException(400, "INVALID_PERIOD", "Khoảng xếp hạng không hợp lệ.");
     if (size < 1 || size > 50)
       throw new DomainException(400, "INVALID_PAGE", "Số lượng xếp hạng phải từ 1 đến 50.");
-    int days = window.equals("DAILY") ? 1 : window.equals("MONTHLY") ? 30 : 7;
+    int days = window.equals("DAILY") ? 1 : window.equals("MONTHLY") || window.equals("RATING") ? 30 : 7;
     String order =
         window.equals("TRENDING")
             ? "(SUM(s.Views)+3*SUM(s.Completions)) DESC,rating DESC,s.ComicId DESC"
-            : "SUM(s.Views) DESC,s.ComicId DESC";
+            : window.equals("RATING")
+                ? "rating DESC,SUM(s.Views) DESC,s.ComicId DESC"
+                : "SUM(s.Views) DESC,s.ComicId DESC";
     String sql =
         "SELECT TOP(?) s.ComicId,SUM(s.Views) AS Views,(SELECT COALESCE(CAST(AVG(CAST(r.Score AS"
             + " decimal(10,2))) AS decimal(10,2)),0) FROM dbo.ComicRating r JOIN dbo.[User] u ON"
             + " u.Id=r.UserId WHERE r.ComicId=s.ComicId AND u.Status='ACTIVE' AND"
             + " (u.Email IS NULL OR u.EmailVerifiedAt IS NOT NULL)) AS rating FROM dbo.ComicStatDaily s JOIN dbo.Comic c"
             + " ON c.Id=s.ComicId WHERE s.StatDate>=DATEADD(day,-?,CAST(SYSUTCDATETIME() AS date))"
-            + " AND c.Visibility='PUBLIC' AND c.DeletedAt IS NULL AND c.AgeRating='ALL_AGE'"
+            + " AND c.Visibility='PUBLIC' AND c.DeletedAt IS NULL"
             + " GROUP BY s.ComicId ORDER BY "
             + order;
     var rows =

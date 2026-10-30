@@ -267,7 +267,9 @@ public final class RankingPanel extends JPanel implements Workspace {
       @Override public Component getTableCellRendererComponent(
           JTable t, Object val, boolean isSel, boolean hasFoc, int row, int col) {
         JLabel l = (JLabel) super.getTableCellRendererComponent(t, val, isSel, hasFoc, row, col);
-        l.setFont(Theme.brand(12));
+        l.setIcon(UiIcons.star(12, new Color(0xF5, 0x9E, 0x0B)));
+        l.setIconTextGap(4);
+        l.setFont(Theme.heading(12));
         l.setForeground(new Color(0xD9, 0x77, 0x06));
         l.setHorizontalAlignment(SwingConstants.CENTER);
         return l;
@@ -319,7 +321,6 @@ public final class RankingPanel extends JPanel implements Workspace {
 
   private void loadRankings() {
     String period = PERIODS.get(Math.min(selectedPeriodIndex, PERIODS.size() - 1));
-    if ("RATING".equals(period)) period = "WEEKLY";
 
     tasks.run(
         this,
@@ -454,16 +455,28 @@ public final class RankingPanel extends JPanel implements Workspace {
     info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
     info.setOpaque(false);
 
-    // Rank icon/symbol
+    // Rank vector icon/badge (graphics2D vector, no emoji square artifact)
     if (isTop1) {
-      JLabel crown = new JLabel("👑");
-      crown.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 20));
+      JLabel crown = new JLabel(UiIcons.crown(22, new Color(0xF5, 0x9E, 0x0B)));
       info.add(crown);
     } else {
-      String circle = rank == 2 ? "②" : "③";
-      JLabel rankCircle = new JLabel(circle);
-      rankCircle.setFont(new Font("Segoe UI Symbol", Font.BOLD, 20));
-      rankCircle.setForeground(new Color(0x64, 0x74, 0x8B));
+      JLabel rankCircle = new JLabel(String.valueOf(rank)) {
+        @Override protected void paintComponent(Graphics g) {
+          Graphics2D g2 = (Graphics2D) g.create();
+          g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+          g2.setColor(new Color(0xEE, 0xF2, 0xF6));
+          g2.fillOval(0, 0, getWidth() - 1, getHeight() - 1);
+          g2.setColor(new Color(0x94, 0xA3, 0xB8));
+          g2.drawOval(0, 0, getWidth() - 1, getHeight() - 1);
+          g2.dispose();
+          super.paintComponent(g);
+        }
+      };
+      rankCircle.setPreferredSize(new Dimension(24, 24));
+      rankCircle.setMaximumSize(new Dimension(24, 24));
+      rankCircle.setHorizontalAlignment(SwingConstants.CENTER);
+      rankCircle.setFont(Theme.heading(12));
+      rankCircle.setForeground(new Color(0x47, 0x55, 0x69));
       info.add(rankCircle);
     }
     info.add(Box.createVerticalStrut(6));
@@ -486,8 +499,9 @@ public final class RankingPanel extends JPanel implements Workspace {
     info.add(viewsLbl);
     info.add(Box.createVerticalStrut(4));
 
-    JLabel starLbl = Theme.plainLabel(String.format(Locale.ROOT, "★ %.1f / 5", rating));
-    starLbl.setFont(Theme.brand(12));
+    JLabel starLbl = new JLabel(String.format(Locale.ROOT, "%.1f / 5", rating), UiIcons.star(12, new Color(0xF5, 0x9E, 0x0B)), SwingConstants.LEFT);
+    starLbl.setIconTextGap(4);
+    starLbl.setFont(Theme.heading(12));
     starLbl.setForeground(new Color(0xD9, 0x77, 0x06));
     info.add(starLbl);
 
@@ -514,7 +528,7 @@ public final class RankingPanel extends JPanel implements Workspace {
           "#" + rank,
           title,
           "Hành động",
-          String.format(Locale.ROOT, "★ %.1f", rating),
+          String.format(Locale.ROOT, "%.1f", rating),
           String.format(Locale.ROOT, "%,d", views)
       });
     }

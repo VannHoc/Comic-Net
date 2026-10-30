@@ -1,5 +1,46 @@
 # Comic Net — điểm tiếp nối
 
+**Checkpoint 2026-10-30 — OpenAI Codex, kết nối bản `.bak` trên máy mới:** Theo xác nhận người dùng, họ tự chép và restore `.bak` bằng SSMS; script không thực hiện restore. `deploy/setup/Setup.ps1` mặc định `-Mode Restore` chỉ yêu cầu `ComicNetDev` đã tồn tại, tạo/remap hai SQL login trên instance mới, kiểm tra kết nối, chạy Flyway và grants; `INSTALL.md` có hướng dẫn SSMS → Setup → Start và lưu ý ảnh RustFS nằm ngoài `.bak`. PowerShell parser PASS; chưa thử trên máy mới hoặc database đã restore.
+
+**Checkpoint 2026-10-30 — OpenAI Codex, bộ cài máy Windows mới (chưa hoàn thành):** Tạo `deploy/setup/Common.ps1`, `Setup.ps1`, `Start.ps1`, `INSTALL.md`. Setup kiểm tra Windows/JDK 21/sqlcmd/SQL TCP, hỏi credential, lưu cấu hình DPAPI vào `.local/`, tạo DB mới bằng template, chạy Flyway và grants. Start dùng cấu hình máy hiện tại, khởi động RustFS/Mailpit/backend/Swing. Parser PowerShell 3/3 PASS; Maven Swing 26/26 PASS. Maven reactor package FAIL vì JAR backend đang bị khóa bởi tiến trình khác, không dừng tiến trình đó. Chưa chạy Setup/Start trên máy mới hoặc restore, chưa xác minh SQL/GUI end-to-end. RESTORE tự động hiện chưa an toàn và bị chặn có chủ đích; hướng dẫn SSMS trong INSTALL.md. Không đổi backend/API/schema hoặc dữ liệu.
+
+**Checkpoint 2026-10-30 — Google Antigravity, Sửa Lỗi Đọc Truyện (Logic Inversion), Xem Thêm Chương, Thiết Kế Lại Rating 5 Sao, Kích Hoạt Ranking & Nhận Diện Thương Hiệu (QA Backend & GUI PASS 100%):**
+- **Agent:** Google Antigravity; ngày: 2026-10-30.
+- **Nội dung thực hiện & giải pháp kỹ thuật:**
+  1. **Sửa dứt điểm Lỗi Logic Đọc Truyện (Inversion Bug):**
+     - *Hiện tượng cũ:* Bấm "Đọc tiếp" lại mở từ đầu; bấm "Đọc từ đầu" lại khôi phục vị trí cũ.
+     - *Nguyên nhân:* Thứ tự danh sách chương backend trả về theo `SortOrder` tăng dần (index 0 là Chapter 1). Trước đó logic gọi nhầm index cuối và luôn tự động khôi phục vị trí lưu dở do thiếu phân định chế độ đọc.
+     - *Đã khắc phục:*
+       - Bổ sung `ReadMode` enum (`START_FROM_BEGINNING`, `RESUME`) trong `ReaderLocation.java`.
+       - "Đọc từ đầu": Mở `chapterRows.get(0)` tại trang 1, offset 0 với `ReaderLocation.startFromBeginning(chapterId)`. `ReaderPanel.java` khởi tạo vị trí đầu trang mà không nạp tiến độ cũ, không xóa lịch sử và không ghi đè bừa bãi tiến độ của người dùng.
+       - "Đọc tiếp": Truy vấn `/api/v1/me/history?size=50` để tìm chương đọc gần nhất của truyện. Nếu chương trước đã hoàn thành, tự động chuyển sang chương tiếp theo; nếu đang đọc dở, khôi phục chính xác chương, trang và offset dọc; nếu chưa có lịch sử, bắt đầu từ chương 1 trang 1.
+       - "Đọc chương": Mở đúng chương được click chọn từ bảng chương, bắt đầu từ trang 1 (hoặc vị trí đã lưu của chương đó).
+  2. **Sửa lỗi "Xem thêm chương" bị biến mất toàn bộ danh sách:**
+     - *Nguyên nhân:* Hàm `loadChapters()` trước đó gọi `chapterRows.clear()` vô điều kiện trước khi fetch, dẫn đến việc xóa sạch toàn bộ danh sách cũ khi đang tải trang tiếp theo.
+     - *Đã khắc phục:* `loadChapters(boolean append)` chỉ xóa hàng khi tải mới từ trang 0. Khi nhấn "Xem thêm chương ▼", hệ thống nối tiếp các chương trang kế tiếp (`chapterPage++`). Khi đã hiển thị tất cả chương, nút chuyển thành `"Đã hiển thị tất cả N chương"` và tự disable.
+  3. **Thiết kế lại toàn diện Rating Dialog (Đánh giá 5 sao & Nhận xét):**
+     - *StarRatingPicker:* Thay thế JSpinner bằng bộ chọn 5 sao vàng tương tác trực tiếp (hỗ trợ hover đổi màu, click chọn từ 1 đến 5 sao).
+     - *Phần Tổng quan (Overview):* Điểm số to 5.0, 5 sao vàng, tổng lượt đánh giá, thanh phân phối tỷ lệ 5★ đến 1★ với icon vector Graphics2D vàng kim `UiIcons.star(10, ...)`.
+     - *Danh sách nhận xét cộng đồng:* Thiết kế card hiện đại hiển thị avatar tròn ký tự đầu, tên người dùng, thời gian, số sao, nội dung nhận xét, phân trang mượt mà.
+     - *Đồng bộ thời gian thực:* Khi gửi hoặc xóa đánh giá, kích hoạt callback `onRatingUpdated` để làm mới điểm trung bình và số lượt đánh giá trên dialog chi tiết truyện và thẻ catalog.
+  4. **Kích hoạt luồng Bảng Xếp Hạng (Ranking) & Ghi nhận Lượt Đọc (Views):**
+     - Cấu hình Spring Security: Bổ sung matcher `authenticated()` cho `POST /api/v1/comics/*/views` và `POST /api/v1/chapters/*/completion`, bỏ chặn 403 để `ReaderPanel` ghi nhận lượt đọc hợp lệ vào bảng `dbo.ComicView` và `dbo.ComicStatDaily`.
+     - `AnalyticsService.java`: Bổ sung chu kỳ `RATING`, gỡ bỏ bộ lọc cứng `AgeRating='ALL_AGE'` để mọi truyện công khai hợp lệ đều tham gia bảng xếp hạng.
+     - `RankingPanel.java`: Khối TOP 3 Podium hiển thị vương miện hoàng gia vector Graphics2D (`UiIcons.crown`), huy hiệu TOP 2/3 vector không lỗi font; bảng xếp hạng phẳng chuẩn Design System; cột Đánh giá dùng vector star vàng kim.
+  5. **Tinh chỉnh Dialog Chi Tiết Truyện (`CatalogPanel.detailDialog`):**
+     - Loại bỏ nút đóng X thừa bên trong giao diện (tránh 2 nút X chồng chéo).
+     - Chuẩn hóa phần tóm tắt giới thiệu tiếng Việt sạch sẽ với nút mở rộng/thu gọn "Xem thêm / Thu gọn".
+     - Mở rộng combobox Bản dịch (225px) tránh bị cắt ngắn tên nhóm dịch `(#227)`.
+  6. **Bộ Nhận Diện Thương Hiệu & Icon Ứng Dụng:**
+     - Tạo bộ icon ứng dụng đa kích thước (16, 32, 48, 64, 128, 256px) và `comic-net.ico` tại `desktop-swing/src/main/resources/icons/`.
+     - Cung cấp `AppIcons.java` áp dụng đồng bộ `AppIcons.applyTo(Window)` cho `MainFrame`, `detailDialog` và `RatingDialog`.
+- **Bằng chứng kiểm thử nghiệm thu (Evidence):**
+  - Reactor Unit tests: **55/55 PASS** toàn dự án (Backend 29/29, Desktop Swing 26/26).
+  - OpenAPI MVP Contract: **174/174 operations PASS**.
+  - Live UI Integration Tests: `RedesignUiLiveIT` PASS (38.1s), `CaptureNewFeaturesIT` PASS (10.7s).
+  - Bộ ảnh QA thực tế đầy đủ tại `.local/qa/redesign/` (bao gồm `13-ranking-live.jpg`, `14-rating-dialog-redesign.jpg`, `15-comic-detail-polished.jpg`).
+  - Đóng gói file JAR độc lập `comic-net-desktop-swing-0.1.0-SNAPSHOT.jar` BUILD SUCCESS.
+
 **Checkpoint 2026-10-30 — Google Antigravity, Khắc phục Triệt để Lỗi Đánh Giá Truyện & Lỗi Truy Cập Thông Báo Bị Chặn (QA Backend & GUI PASS 100%):**
 - **Agent:** Google Antigravity; ngày: 2026-10-30.
 - **Nội dung thực hiện & nguyên nhân cốt lõi (Root Causes):**
@@ -383,4 +424,7 @@ Phase 2 đã có luồng Reader → Creator draft/upload/preview/submit → Admi
 - SQL V23/V24: OTP email 6 số, giới hạn 5 lần thử/60 giây gửi lại, username duy nhất, email nullable; phiên nhớ đăng nhập mã hóa DPAPI. Không tạo admin/creator mặc định. `/me/username` cho tài khoản cũ đặt username.
 - Kiểm chứng: Desktop `test package` **21/21 PASS**; `IdentityHttpIT` với SQL Server ComicNetDev **6/6 PASS**, gồm username-only, số điện thoại tùy chọn và đổi username. Đã mở ứng dụng thật, xem trực quan đăng nhập/đăng ký/quên mật khẩu ở cửa sổ 1267×795; thêm bố cục đăng ký hai cột khi thấp và xác minh tại 1267×659: không có thanh cuộn ngoài, form/nút/link đều nhìn thấy. Chưa kiểm chứng trực quan OTP/reset/success, DPI 125/150%, và SMS recovery; không đánh dấu PASS các mục này.
 - Tiếp theo: nếu có SMS provider, triển khai xác thực số điện thoại và khôi phục qua SMS; kiểm tra GUI OTP/reset/success cùng DPI trên máy đích. Giữ Phase 4 ngoài phạm vi lượt này.
+
+
+**Checkpoint 2026-10-30 — OpenAI Codex tiếp nhận:** Đã đọc bốn file điều phối và Git status; chưa sửa source hoặc chạy test. Sẽ xác minh bàn giao mới nhất với code/test trước khi tiếp tục UI/UX.
 

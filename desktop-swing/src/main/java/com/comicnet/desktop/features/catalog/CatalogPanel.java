@@ -7,6 +7,7 @@ import com.comicnet.desktop.features.recommendation.RatingDialog;
 import com.comicnet.desktop.features.search.SearchAssist;
 import com.comicnet.desktop.ui.*;
 import java.awt.*;
+import java.awt.event.*;
 import java.awt.geom.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -86,6 +87,8 @@ public final class CatalogPanel extends JPanel implements Workspace {
   private final JButton favButton = new JButton("Yêu thích");
   private final JButton followButton = new JButton("Theo dõi");
   private final JLabel ratingStatLabel = Theme.plainLabel("★ 4.8/5 (0 đánh giá)");
+  private final JLabel chCountLabel = Theme.plainLabel("· 0 chương");
+  private final JButton chMoreBtn = new JButton("Xem thêm chương ▼");
 
   private final DefaultTableModel chapters =
       new DefaultTableModel(new Object[] {"CHƯƠNG", "TÊN CHƯƠNG", "TRẠNG THÁI", "HÀNH ĐỘNG"}, 0) {
@@ -997,6 +1000,7 @@ public final class CatalogPanel extends JPanel implements Workspace {
           if (detailDialog == null) {
             Frame owner = (Frame) SwingUtilities.getWindowAncestor(this);
             detailDialog = new JDialog(owner, "Comic Net · Chi tiết truyện", false);
+            AppIcons.applyTo(detailDialog);
             detailDialog.getContentPane().add(detail);
           }
           detailDialog.setTitle("Comic Net · " + selected.path("title").asText());
@@ -1065,17 +1069,8 @@ public final class CatalogPanel extends JPanel implements Workspace {
     titleBox.add(breadcrumb);
     dialogHeader.add(titleBox, BorderLayout.WEST);
 
-    JButton closeBtn = new JButton("×");
-    closeBtn.setFont(new Font("Segoe UI", Font.BOLD, 18));
-    closeBtn.setForeground(Theme.MUTED);
-    closeBtn.setFocusPainted(false);
-    closeBtn.setContentAreaFilled(false);
-    closeBtn.setBorder(new EmptyBorder(0, 8, 0, 4));
-    closeBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-    closeBtn.addActionListener(e -> {
-      if (detailDialog != null) detailDialog.setVisible(false);
-    });
-    dialogHeader.add(closeBtn, BorderLayout.EAST);
+    // Single clean OS window close control, avoiding duplicate × button
+    // dialogHeader.add(closeBtn, BorderLayout.EAST);
     detail.add(dialogHeader, BorderLayout.NORTH);
 
     // Main Center Split Pane / Body
@@ -1185,13 +1180,37 @@ public final class CatalogPanel extends JPanel implements Workspace {
     infoPanel.add(statsRow);
     infoPanel.add(Box.createVerticalStrut(8));
 
-    // Row 5: Description text (2-3 lines)
-    String descText = selected.path("description").asText("Một hành trình khám phá những bí ẩn phía sau từng trang truyện...");
-    if (descText.length() > 140) descText = descText.substring(0, 137) + "…";
-    JLabel descLabel = Theme.plainLabel(descText + " — Xem thêm");
+    // Row 5: Vietnamese Description with interactive expand/collapse
+    String rawDesc = selected.path("description").asText("").strip();
+    if (rawDesc.isBlank() || "Description".equalsIgnoreCase(rawDesc)) {
+      rawDesc = "Chưa có phần giới thiệu chi tiết cho truyện này.";
+    }
+    final String fullDesc = rawDesc;
+    boolean isLong = fullDesc.length() > 140;
+    String shortDesc = isLong ? fullDesc.substring(0, 137) + "…" : fullDesc;
+    JLabel descLabel = Theme.plainLabel(shortDesc);
     descLabel.setFont(Theme.label(12));
     descLabel.setForeground(Theme.MUTED);
-    infoPanel.add(descLabel);
+    JPanel descBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    descBox.setOpaque(false);
+    descBox.add(descLabel);
+    if (isLong) {
+      JLabel toggleDesc = new JLabel("Xem thêm");
+      toggleDesc.setFont(Theme.brand(12));
+      toggleDesc.setForeground(Theme.ACTION);
+      toggleDesc.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+      toggleDesc.addMouseListener(new MouseAdapter() {
+        boolean expanded = false;
+        @Override public void mouseClicked(MouseEvent e) {
+          expanded = !expanded;
+          descLabel.setText(expanded ? fullDesc : shortDesc);
+          toggleDesc.setText(expanded ? "Thu gọn" : "Xem thêm");
+          infoPanel.revalidate();
+        }
+      });
+      descBox.add(toggleDesc);
+    }
+    infoPanel.add(descBox);
 
     headerCard.add(infoPanel, BorderLayout.CENTER);
 
@@ -1213,11 +1232,11 @@ public final class CatalogPanel extends JPanel implements Workspace {
     JLabel chTitle = new JLabel("Danh sách chương");
     chTitle.setFont(Theme.heading(15));
     chTitle.setForeground(Theme.TEXT);
-    JLabel chCount = Theme.plainLabel("· " + chapterRows.size() + " chương");
-    chCount.setFont(Theme.label(12));
-    chCount.setForeground(Theme.MUTED);
+    chCountLabel.setText("· " + chapterRows.size() + " chương");
+    chCountLabel.setFont(Theme.label(12));
+    chCountLabel.setForeground(Theme.MUTED);
     chTitleBox.add(chTitle);
-    chTitleBox.add(chCount);
+    chTitleBox.add(chCountLabel);
     chHeader.add(chTitleBox, BorderLayout.WEST);
 
     JPanel chTools = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
@@ -1227,7 +1246,7 @@ public final class CatalogPanel extends JPanel implements Workspace {
     transTag.setForeground(Theme.MUTED);
     chTools.add(transTag);
     translations.setFont(Theme.label(12));
-    translations.setPreferredSize(new Dimension(185, 30));
+    translations.setPreferredSize(new Dimension(225, 30));
     translations.setRenderer(new DefaultListCellRenderer() {
       @Override public Component getListCellRendererComponent(
           JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
@@ -1288,18 +1307,19 @@ public final class CatalogPanel extends JPanel implements Workspace {
     chScroll.setBorder(BorderFactory.createLineBorder(Theme.BORDER, 1));
     chaptersCard.add(chScroll, BorderLayout.CENTER);
 
-    // "Xem thêm chương ▼" footer
+    // "Xem thêm chương ▼" footer with non-destructive pagination
     JPanel chMoreBar = new JPanel(new FlowLayout(FlowLayout.CENTER));
     chMoreBar.setOpaque(false);
-    JButton chMoreBtn = new JButton("Xem thêm chương ▼");
+    chMoreBtn.setText("Xem thêm chương ▼");
     chMoreBtn.setFont(Theme.label(12));
     chMoreBtn.setForeground(Theme.MUTED);
     chMoreBtn.setContentAreaFilled(false);
     chMoreBtn.setBorder(new EmptyBorder(4, 12, 4, 12));
     chMoreBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    for (var l : chMoreBtn.getActionListeners()) chMoreBtn.removeActionListener(l);
     chMoreBtn.addActionListener(e -> {
       chapterPage++;
-      loadChapters();
+      loadChapters(true);
     });
     chMoreBar.add(chMoreBtn);
     chaptersCard.add(chMoreBar, BorderLayout.SOUTH);
@@ -1327,17 +1347,57 @@ public final class CatalogPanel extends JPanel implements Workspace {
     PrimaryButton readContinue = new PrimaryButton("Đọc tiếp");
     readContinue.setIcon(UiIcons.bookOpen(14, Color.WHITE));
     readContinue.addActionListener(e -> {
-      if (!chapterRows.isEmpty()) {
-        openSelectedChapter(0);
-      } else {
+      if (chapterRows.isEmpty()) {
         detailMessage.setText("Chưa có chương để đọc.");
+        return;
       }
+      if (!api.signedIn()) {
+        if (detailDialog != null) detailDialog.setVisible(false);
+        read.accept(ReaderLocation.chapter(chapterRows.get(0).path("id").asText()));
+        return;
+      }
+      details.run(this, detailMessage, api.get("/me/history?size=50"), reply -> {
+        JsonNode items = reply.body() != null ? reply.body().path("items") : null;
+        JsonNode found = null;
+        int foundIdx = -1;
+        if (items != null && items.isArray()) {
+          for (JsonNode prog : items) {
+            String chId = prog.path("chapterId").asText();
+            for (int i = 0; i < chapterRows.size(); i++) {
+              if (chId.equals(chapterRows.get(i).path("id").asText())) {
+                found = prog;
+                foundIdx = i;
+                break;
+              }
+            }
+            if (found != null) break;
+          }
+        }
+        if (detailDialog != null) detailDialog.setVisible(false);
+        if (found == null) {
+          read.accept(ReaderLocation.resume(chapterRows.get(0).path("id").asText()));
+        } else {
+          boolean completed = found.path("completed").asBoolean(false);
+          if (completed && foundIdx + 1 < chapterRows.size()) {
+            read.accept(ReaderLocation.chapter(chapterRows.get(foundIdx + 1).path("id").asText()));
+          } else {
+            String cId = found.path("chapterId").asText();
+            String vId = found.path("versionId").asText(null);
+            String pId = found.path("pageId").asText(null);
+            double off = found.path("relativeOffset").asDouble(0.0);
+            read.accept(ReaderLocation.resume(cId, vId, pId, off));
+          }
+        }
+      });
     });
 
     JButton readFirst = button("Đọc từ đầu", () -> {
-      if (!chapterRows.isEmpty()) {
-        openSelectedChapter(chapterRows.size() - 1);
+      if (chapterRows.isEmpty()) {
+        detailMessage.setText("Chưa có chương để đọc.");
+        return;
       }
+      if (detailDialog != null) detailDialog.setVisible(false);
+      read.accept(ReaderLocation.startFromBeginning(chapterRows.get(0).path("id").asText()));
     });
 
     leftButtons.add(readContinue);
@@ -1364,16 +1424,17 @@ public final class CatalogPanel extends JPanel implements Workspace {
 
     JButton rateBtn = button("Đánh giá truyện", UiIcons.star(14, new Color(0xD9, 0x77, 0x06)), () -> {
       if (selected != null) {
-        new RatingDialog(detailDialog, api, selected.path("id").asText()).setVisible(true);
-        // Reload rating after closing dialog
-        details.run(this, detailMessage, api.get("/comics/" + selected.path("id").asText() + "/rating-summary"),
-            rReply -> {
-              if (rReply.body() != null && rReply.body().has("average")) {
-                currentRating = rReply.body().path("average").asDouble(4.8);
-                currentRatingCount = rReply.body().path("count").asInt(0);
-                updateRatingDisplay();
-              }
-            });
+        String comicId = selected.path("id").asText();
+        new RatingDialog(detailDialog, api, comicId, () -> {
+          details.run(this, detailMessage, api.get("/comics/" + comicId + "/rating-summary"),
+              rReply -> {
+                if (rReply.body() != null && rReply.body().has("average")) {
+                  currentRating = rReply.body().path("average").asDouble(4.8);
+                  currentRatingCount = rReply.body().path("count").asInt(0);
+                  updateRatingDisplay();
+                }
+              });
+        }).setVisible(true);
       }
     });
 
@@ -1508,18 +1569,53 @@ public final class CatalogPanel extends JPanel implements Workspace {
   }
 
   private void loadChapters() {
+    loadChapters(false);
+  }
+
+  private void loadChapters(boolean append) {
     if (selected == null || translations.getSelectedItem() == null) return;
     String translationId = ((String) translations.getSelectedItem()).split(":")[0];
+    if (!append) {
+      chapterPage = 0;
+      chapterRows.clear();
+      chapters.setRowCount(0);
+    }
     details.run(
         this,
         detailMessage,
         api.get("/translations/" + translationId + "/chapters?page=" + chapterPage + "&size=20"),
         reply -> {
-          chapterRows.clear();
-          for (JsonNode ch : reply.body().path("items")) {
-            chapterRows.add(ch);
+          JsonNode items = reply.body() != null ? reply.body().path("items") : null;
+          long total = reply.body() != null ? reply.body().path("page").path("totalElements").asLong(0) : 0;
+          int newCount = 0;
+          if (items != null && items.isArray()) {
+            for (JsonNode ch : items) {
+              String id = ch.path("id").asText();
+              boolean exists = false;
+              for (JsonNode existing : chapterRows) {
+                if (id.equals(existing.path("id").asText())) {
+                  exists = true;
+                  break;
+                }
+              }
+              if (!exists) {
+                chapterRows.add(ch);
+                newCount++;
+              }
+            }
           }
           reloadChapterRows();
+          chCountLabel.setText("· " + Math.max(chapterRows.size(), total) + " chương");
+          if (append && newCount == 0) {
+            chapterPage = Math.max(0, chapterPage - 1);
+          }
+          if (chapterRows.size() >= total || newCount < 20) {
+            chMoreBtn.setText(chapterRows.isEmpty() ? "Chưa có chương" : "Đã hiển thị tất cả " + chapterRows.size() + " chương");
+            chMoreBtn.setEnabled(false);
+          } else {
+            chMoreBtn.setText("Xem thêm chương ▼");
+            chMoreBtn.setEnabled(true);
+          }
         });
   }
 

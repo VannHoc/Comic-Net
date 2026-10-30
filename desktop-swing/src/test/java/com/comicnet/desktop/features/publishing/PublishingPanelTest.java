@@ -27,8 +27,7 @@ class PublishingPanelTest {
   }
 
   @Test
-  void creatingDraftAfterSelectingPublishedVersionKeepsTheNewEditorOpen() throws Exception {
-    var created = new AtomicBoolean();
+  void creatorStudioDashboardLoadsComicsAndOpensWizard() throws Exception {
     var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     var executor = Executors.newCachedThreadPool();
     server.setExecutor(executor);
@@ -38,37 +37,17 @@ class PublishingPanelTest {
           String path = exchange.getRequestURI().getPath(), response;
           if (path.equals("/api/v1/me")) response = "{\"roles\":[\"READER\",\"CREATOR\"]}";
           else if (path.equals("/api/v1/publishing/comics"))
-            response = list("{\"id\":\"11\",\"title\":\"Comic\",\"type\":\"MANGA\"}");
+            response = list("{\"id\":\"11\",\"title\":\"Truyện V2\",\"type\":\"MANGA\",\"description\":\"Mô tả\"}");
           else if (path.endsWith("/comics/11/translations"))
-            response =
-                list(
-                    "{\"id\":\"22\",\"languageTag\":\"vi\",\"editionKey\":\"main\",\"visibility\":\"PUBLIC\"}");
+            response = list("{\"id\":\"22\",\"languageTag\":\"vi\",\"editionKey\":\"main\",\"visibility\":\"PUBLIC\"}");
           else if (path.endsWith("/translations/22/chapters"))
-            response =
-                list(
-                    "{\"id\":\"33\",\"displayNumber\":\"1\",\"title\":\"Chapter\",\"visibility\":\"PUBLIC\"}");
-          else if (path.endsWith("/translations/22/volumes")) response = list("");
-          else if (path.equals("/api/v1/chapters/33/versions")) {
-            created.set(true);
-            response = version("55", 2, "DRAFT");
-          } else if (path.equals("/api/v1/publishing/chapters/33/versions")) {
-            if (created.get()) {
-              try {
-                Thread.sleep(250);
-              } catch (InterruptedException error) {
-                Thread.currentThread().interrupt();
-              }
-              response = list(version("55", 2, "DRAFT") + "," + version("44", 1, "PUBLISHED"));
-            } else response = list(version("44", 1, "PUBLISHED"));
-          } else if (path.equals("/api/v1/publishing/versions/44"))
-            response = version("44", 1, "PUBLISHED");
-          else if (path.equals("/api/v1/publishing/versions/55"))
-            response = version("55", 2, "DRAFT");
-          else if (path.equals("/api/v1/publishing/versions/55/submit"))
-            response = version("55", 2, "READY_FOR_REVIEW");
-          else if (path.equals("/api/v1/publishing/chapters/33"))
-            response = "{\"id\":\"33\",\"title\":\"Chapter\",\"publishedVersionId\":\"44\"}";
+            response = list("{\"id\":\"33\",\"displayNumber\":\"1\",\"title\":\"Chapter 1\",\"accessPolicy\":\"FREE\"}");
+          else if (path.equals("/api/v1/publishing/chapters/33/versions"))
+            response = list(version("44", 1, "DRAFT"));
+          else if (path.equals("/api/v1/publishing/versions/44"))
+            response = version("44", 1, "DRAFT");
           else response = "{}";
+
           byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
           exchange.getResponseHeaders().set("Content-Type", "application/json");
           exchange.getResponseHeaders().set("ETag", "\"test-version\"");
@@ -77,6 +56,7 @@ class PublishingPanelTest {
           exchange.close();
         });
     server.start();
+
     var holder = new AtomicReference<PublishingPanel>();
     try (var session = new ClientSession();
         var transport = new ApiTransport(session)) {
@@ -87,46 +67,25 @@ class PublishingPanelTest {
                   URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api/v1")),
               transport,
               session);
+
       SwingUtilities.invokeAndWait(
           () -> {
             var panel = new PublishingPanel(api, ignored -> {});
             holder.set(panel);
             panel.onShown();
           });
+
       PublishingPanel panel = holder.get();
-      JTable comics = table(panel, "Truyện quản lý"),
-          translations = table(panel, "Bản dịch"),
-          chapters = table(panel, "Chương"),
-          versions = table(panel, "Version");
-      await(() -> comics.getRowCount() == 1);
-      SwingUtilities.invokeAndWait(() -> comics.setRowSelectionInterval(0, 0));
-      await(() -> translations.getRowCount() == 1);
-      SwingUtilities.invokeAndWait(() -> translations.setRowSelectionInterval(0, 0));
-      await(() -> chapters.getRowCount() == 1);
-      SwingUtilities.invokeAndWait(() -> chapters.setRowSelectionInterval(0, 0));
-      await(() -> versions.getRowCount() == 1);
-      SwingUtilities.invokeAndWait(() -> versions.setRowSelectionInterval(0, 0));
-      await(() -> label(panel, "Version 1 · PUBLISHED"));
+      // Verify comic card loaded
+      await(() -> label(panel, "Truyện V2"));
+      assertTrue(label(panel, "Xưởng xuất bản"));
+
+      // Click + Tạo truyện
       SwingUtilities.invokeAndWait(
-          () ->
-              find(panel, JButton.class, button -> button.getText().equals("Tạo bản nháp"))
-                  .doClick());
-      await(() -> versions.getRowCount() == 2);
-      await(() -> label(panel, "Version 2 · DRAFT"));
-      SwingUtilities.invokeAndWait(
-          () -> {
-            assertEquals(0, versions.getSelectedRow());
-            assertEquals(2, versions.getValueAt(0, 0));
-          });
-      SwingUtilities.invokeAndWait(
-          () ->
-              find(panel, JButton.class, button -> button.getText().equals("Gửi duyệt")).doClick());
-      await(() -> label(panel, "Version 2 · READY_FOR_REVIEW"));
-      SwingUtilities.invokeAndWait(
-          () -> {
-            assertEquals("READY_FOR_REVIEW", versions.getValueAt(0, 1));
-            assertEquals(0, versions.getSelectedRow());
-          });
+          () -> find(panel, JButton.class, b -> "+ Tạo truyện".equals(b.getText())).doClick());
+
+      // Verify wizard step 1 opened
+      await(() -> label(panel, "Tạo truyện mới"));
     } finally {
       if (holder.get() != null) SwingUtilities.invokeAndWait(holder.get()::close);
       server.stop(0);
@@ -145,7 +104,7 @@ class PublishingPanelTest {
   }
 
   private static String list(String values) {
-    return "{\"items\":[" + values + "],\"page\":{\"page\":0,\"size\":20,\"totalElements\":2}}";
+    return "{\"items\":[" + values + "],\"page\":{\"page\":0,\"size\":20,\"totalElements\":1}}";
   }
 
   private static void await(BooleanSupplier check) throws Exception {
@@ -159,15 +118,11 @@ class PublishingPanelTest {
     fail("Expected Swing state was not reached.");
   }
 
-  private static JTable table(Container root, String heading) {
-    return find(root, JTable.class, table -> table.getColumnName(0).equals(heading));
-  }
-
   private static boolean label(Container root, String prefix) {
     return findOrNull(
             root,
             JLabel.class,
-            value -> value.getText() != null && value.getText().startsWith(prefix))
+            value -> value.getText() != null && value.getText().contains(prefix))
         != null;
   }
 

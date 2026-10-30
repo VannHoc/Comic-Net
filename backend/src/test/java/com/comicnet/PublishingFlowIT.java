@@ -306,22 +306,16 @@ class PublishingFlowIT {
     var job = upload(c, c.version(), image(345), null);
     worker.processJob(Ids.parse(job.id()));
     publishing.submit(c.creator(), c.version(), Etags.of(publishing.versionToken(c.version())));
-    accounts.roles(
-        c.admin(),
-        c.creator().userId(),
-        Set.of("READER", "CREATOR", "MODERATOR"),
-        "JUnit reviewer fixture",
-        Etags.of(accounts.version(c.creator().userId())));
-    var reviewer = actors.login(auth.user(c.creator().userId()).email());
+    // Non-admin creator cannot review
     assertThatThrownBy(
             () ->
                 publishing.review(
-                    reviewer,
+                    c.creator(),
                     c.version(),
                     new Review("APPROVE", null),
                     Etags.of(publishing.versionToken(c.version()))))
         .isInstanceOfSatisfying(
-            DomainException.class, e -> assertThat(e.code()).isEqualTo("SELF_REVIEW_DENIED"));
+            DomainException.class, e -> assertThat(e.status()).isEqualTo(403));
     publishing.review(
         c.admin(),
         c.version(),

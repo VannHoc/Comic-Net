@@ -112,7 +112,7 @@ public class SqlAccountAdministration implements AccountAdministration {
     lock(actor, id, etag);
     if (roles == null
         || roles.isEmpty()
-        || !Set.of("READER", "CREATOR", "MODERATOR", "ADMINISTRATOR").containsAll(roles))
+        || !Set.of("READER", "CREATOR", "ADMINISTRATOR").containsAll(roles))
       throw new DomainException(400, "INVALID_ROLES", "Vai trò không hợp lệ.");
     protectLastAdmin(
         id, identities.roles(id).contains("ADMINISTRATOR") && !roles.contains("ADMINISTRATOR"));

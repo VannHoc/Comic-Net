@@ -60,7 +60,7 @@ public final class PublishingDtos {
   public record Reorder(@NotEmpty @Size(max = 500) List<@NotBlank String> pageIds) {}
 
   public record Review(
-      @NotBlank @Pattern(regexp = "APPROVE|REJECT") String decision,
+      @NotBlank @Pattern(regexp = "APPROVE|REJECT|REQUEST_CHANGES|NEEDS_CHANGES") String decision,
       @Size(min = 1, max = 2000) String reason) {}
 
   public record Publish(@NotBlank String versionId) {}

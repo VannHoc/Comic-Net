@@ -546,6 +546,20 @@ public final class ReaderPanel extends JPanel implements Workspace {
                   revision = value.path("revision").asLong();
                   historyGeneration = value.path("historyGeneration").asInt();
                   progressReady = true;
+                  if (initialLocation != null && initialLocation.mode() == ReaderLocation.ReadMode.START_FROM_BEGINNING) {
+                    jump(0, 0);
+                    if (manifest != null && manifest.path("pages").size() > 0) {
+                      JsonNode firstPage = manifest.path("pages").get(0);
+                      anchor = new ReaderLocation(
+                          chapterId,
+                          manifest.path("versionId").asText(),
+                          firstPage.path("pageId").asText(),
+                          0.0,
+                          ReaderLocation.ReadMode.START_FROM_BEGINNING);
+                    }
+                    saveMessage.setText("Đang đọc từ đầu · Tiến độ cũ vẫn được bảo lưu.");
+                    return;
+                  }
                   if (initialLocation != null && initialLocation.pageId() != null)
                     restore(initialLocation);
                   else if (!value.path("pageId").isNull()

@@ -17228,7 +17228,9 @@
             "type": "string",
             "enum": [
               "APPROVE",
-              "REJECT"
+              "REJECT",
+              "REQUEST_CHANGES",
+              "NEEDS_CHANGES"
             ]
           },
           "reason": {

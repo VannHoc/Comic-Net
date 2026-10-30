@@ -455,26 +455,33 @@ public class PublishingService {
     if (!version.state().equals("READY_FOR_REVIEW"))
       throw new DomainException(
           409, "VERSION_NOT_REVIEWABLE", "Version không ở trạng thái chờ duyệt.");
-    if (Ids.parse(version.createdBy()) == actor.userId()
-        || version.submittedBy() != null && Ids.parse(version.submittedBy()) == actor.userId())
+    if (!actor.administrator()
+        && (Ids.parse(version.createdBy()) == actor.userId()
+            || version.submittedBy() != null && Ids.parse(version.submittedBy()) == actor.userId()))
       throw new DomainException(
           403, "SELF_REVIEW_DENIED", "Người tạo hoặc gửi version không được tự duyệt.");
     boolean approved = input.decision().equals("APPROVE");
+    boolean requestChanges =
+        input.decision().equals("REQUEST_CHANGES") || input.decision().equals("NEEDS_CHANGES");
     if (!approved && (input.reason() == null || input.reason().isBlank()))
       throw new DomainException(400, "REVIEW_REASON_REQUIRED", "Từ chối duyệt cần lý do.");
     readyPages(id);
+    String nextState = approved ? "APPROVED" : (requestChanges ? "NEEDS_CHANGES" : "REJECTED");
+    boolean workingCopy = approved || requestChanges;
     jdbc.update(
         "UPDATE dbo.ChapterVersion SET"
             + " State=?,IsWorkingCopy=?,ReviewedBy=?,ReviewedAt=SYSUTCDATETIME(),ReviewReason=?"
             + " WHERE Id=?",
-        approved ? "APPROVED" : "REJECTED",
-        approved,
+        nextState,
+        workingCopy,
         actor.userId(),
         input.reason(),
         id);
     audit.record(
         actor.userId(),
-        approved ? "VERSION_APPROVED" : "VERSION_REJECTED",
+        approved
+            ? "VERSION_APPROVED"
+            : (requestChanges ? "VERSION_REQUESTED_CHANGES" : "VERSION_REJECTED"),
         "ChapterVersion",
         id + "",
         "SUCCESS",
@@ -491,7 +498,10 @@ public class PublishingService {
       throw new DomainException(422, "VERSION_PARENT_MISMATCH", "Version không thuộc chapter này.");
     scopes.version(actor, id, "chapter.publish", true);
     var version = data.version(id);
-    if (!version.state().equals("APPROVED")
+    boolean admin = actor.administrator();
+    boolean publishable = version.state().equals("APPROVED")
+        || (admin && (version.state().equals("DRAFT") || version.state().equals("READY_FOR_REVIEW")));
+    if (!publishable
         || parent.comicVisibility().equals("ARCHIVED")
         || parent.translationVisibility().equals("ARCHIVED"))
       throw new DomainException(
@@ -551,7 +561,11 @@ public class PublishingService {
     scopes.version(actor, version, "chapter.publish", true);
     var snapshot = data.version(version);
     // A scheduled snapshot can be rescheduled until its release time.
-    if (!snapshot.state().equals("APPROVED") && !snapshot.state().equals("SCHEDULED"))
+    boolean admin = actor.administrator();
+    boolean schedulable = snapshot.state().equals("APPROVED")
+        || snapshot.state().equals("SCHEDULED")
+        || (admin && (snapshot.state().equals("DRAFT") || snapshot.state().equals("READY_FOR_REVIEW")));
+    if (!schedulable)
       throw new DomainException(
           409, "VERSION_NOT_SCHEDULABLE", "Chỉ lên lịch snapshot đã duyệt.");
     if (parent.comicVisibility().equals("ARCHIVED")

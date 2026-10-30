@@ -51,7 +51,7 @@ public class PublishingScope implements PublishingChapterAccess {
   }
 
   public void reviewer(Identity actor) {
-    if (actor == null || (!actor.administrator() && !actor.roles().contains("MODERATOR")))
+    if (actor == null || !actor.administrator())
       throw DomainException.forbidden();
   }
 

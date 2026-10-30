@@ -81,7 +81,7 @@ public class CatalogService implements CatalogAccess, CatalogQueries {
   }
 
   private boolean reviewer(Identity actor) {
-    return actor != null && (actor.administrator() || actor.roles().contains("MODERATOR"));
+    return actor != null && actor.administrator();
   }
 
   private String nullableId(ResultSet rs, String column) throws SQLException {

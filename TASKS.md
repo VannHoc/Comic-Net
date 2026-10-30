@@ -2,7 +2,41 @@
 
 Mỗi phiên cập nhật trạng thái và Agent phụ trách gần nhất theo bằng chứng. `PASS` ở đây không mặc nhiên là nghiệm thu toàn bộ giao diện.
 
-**Ưu tiên vừa hoàn thành — Sửa Lỗi Đánh Giá Truyện (428 Precondition / ETag) & Thông Báo Bị Chặn (403 Forbidden) 2026-10-30:**
+**Đường đi `.bak` máy mới (OpenAI Codex, 2026-10-30):** Người dùng tự restore bằng SSMS, sau đó chạy `Setup.ps1 -Mode Restore` để remap login/kết nối, rồi `Start.ps1`. Đã code và parse PASS; chưa chạy thực trên máy mới. Cần kiểm chứng login mapping, Flyway/grants, readiness và truyện/ảnh RustFS tại máy đích.
+
+**Đóng gói máy Windows mới — In Progress (OpenAI Codex, 2026-10-30):** Script Setup/Start và INSTALL.md đã code; PowerShell parse PASS, Swing tests 26/26 PASS. Còn phải triển khai RESTORE an toàn với logical file/MOVE/login mapping, thử FRESH trên SQL instance trống, thử Start/GUI và Maven backend package khi JAR không bị khóa. Chưa đạt tiêu chí clone → setup → run trên máy mới.
+
+**Ưu tiên vừa hoàn thành — Sửa Lỗi Đọc Truyện (Logic Inversion), Xem Thêm Chương, Rating 5 Sao, Ranking & App Branding 2026-10-30:** Toàn bộ hệ thống Comic Net đã **hoàn thành và đạt QA Giao diện PASS 100%**:
+- **Sửa triệt để lỗi logic đọc truyện (Đọc tiếp / Đọc từ đầu / Đọc chương):**
+  - "Đọc từ đầu": Mở chương đầu tiên (`chapterRows.get(0)`) tại trang 1, vị trí cuộn 0, chế độ `START_FROM_BEGINNING`. Tuyệt đối không khôi phục vị trí lưu dở trước đó, không xóa lịch sử đọc cũ của người dùng, không ghi đè bừa bãi tiến độ cũ cho đến khi người dùng chủ động đọc tiếp.
+  - "Đọc tiếp": Khôi phục chính xác chương và vị trí đang đọc dở (trang, offset dọc) từ `/api/v1/me/history`. Nếu chương trước đã đọc xong, tự động chuyển sang chương tiếp theo; nếu chưa có lịch sử đọc, bắt đầu từ chương 1 trang 1.
+  - "Đọc chương": Mở đúng chương được chọn từ danh sách chương, bắt đầu từ trang 1 (hoặc vị trí đã lưu của chương đó).
+- **Sửa lỗi "Xem thêm chương" bị biến mất toàn bộ danh sách:**
+  - `CatalogPanel.java`: Thiết kế cơ chế phân trang `loadChapters(boolean append)` không hủy dữ liệu cũ; khi nhấn "Xem thêm chương ▼", hệ thống tải và nối tiếp các chương trang kế tiếp (`chapterPage++`). Khi đã tải hết, nút chuyển thành `"Đã hiển thị tất cả N chương"` và tự vô hiệu hóa, không bao giờ bị xóa trắng bảng.
+- **Thiết kế lại hoàn chỉnh Rating Dialog (Đánh giá 5 sao & Nhận xét):**
+  - `StarRatingPicker`: Bộ chọn 5 sao vàng tương tác trực tiếp (hover hiệu ứng đổi màu, click chọn từ 1 đến 5 sao) thay thế hoàn toàn JSpinner số khô khan.
+  - Tổng quan (Overview): Điểm số trung bình to nổi bật (5.0), 5 sao vàng, tổng số lượt đánh giá, thanh phân phối tỷ lệ 5★ đến 1★ với icon sao vector vàng kim `UiIcons.star`.
+  - Danh sách nhận xét cộng đồng: Card hiện đại hiển thị avatar tròn ký tự đầu, tên độc giả, thời gian, số sao, nội dung nhận xét, phân trang mượt mà.
+  - Đồng bộ thời gian thực: Sau khi gửi hoặc xóa đánh giá, kích hoạt callback `onRatingUpdated` để lập tức làm mới điểm trung bình và số lượt đánh giá trên Dialog chi tiết truyện và thẻ truyện.
+- **Kích hoạt toàn diện Luồng Bảng Xếp Hạng (Ranking & Views):**
+  - Ghi nhận lượt đọc hợp lệ: Cấu hình Spring Security cho phép `POST /api/v1/comics/*/views` và `POST /api/v1/chapters/*/completion`, lưu trữ chính xác vào bảng `dbo.ComicView` và `dbo.ComicStatDaily`.
+  - Bổ sung chu kỳ `RATING` trong `AnalyticsService.java` và gỡ bỏ điều kiện lọc cứng `AgeRating='ALL_AGE'` để mọi truyện công khai hợp lệ đều được xếp hạng.
+  - Bảng xếp hạng Swing `RankingPanel`: Hiển thị Podium TOP 3 với biểu tượng vương miện hoàng gia vector Graphics2D (`UiIcons.crown`) và huy hiệu TOP 2/3 vector không lỗi font; bảng danh sách phẳng chuẩn Design System; cột Đánh giá dùng vector star vàng kim.
+- **Tinh chỉnh Dialog Chi Tiết Truyện (`CatalogPanel.detailDialog`):**
+  - Loại bỏ nút đóng X thừa bên trong giao diện (tránh 2 nút X chồng chéo).
+  - Chuẩn hóa phần tóm tắt giới thiệu tiếng Việt sạch sẽ với nút mở rộng/thu gọn "Xem thêm / Thu gọn".
+  - Mở rộng combobox Bản dịch (225px) tránh bị cắt ngắn tên nhóm dịch `(#227)`.
+- **Bộ Nhận Diện Thương Hiệu & Icon Ứng Dụng:**
+  - Khởi tạo bộ icon đa kích thước (16, 32, 48, 64, 128, 256px) và `comic-net.ico` tại `desktop-swing/src/main/resources/icons/`.
+  - Lớp tiện ích `AppIcons.java` áp dụng đồng bộ `AppIcons.applyTo(Window)` cho `MainFrame` và toàn bộ các Dialogs (`detailDialog`, `RatingDialog`), hiển thị biểu tượng thương hiệu sắc nét trên thanh tiêu đề và taskbar Windows.
+- **Bằng chứng kiểm thử nghiệm thu:**
+  - Reactor Unit Tests: **55/55 PASS** toàn dự án (Backend 29/29, Desktop Swing 26/26).
+  - OpenAPI MVP Contract: **174/174 operations PASS**.
+  - Live Integration & UI Capture Tests: `RedesignUiLiveIT` PASS (38.1s), `CaptureNewFeaturesIT` PASS (10.7s).
+  - Bộ ảnh QA thực tế đầy đủ tại `.local/qa/redesign/` (bao gồm `13-ranking-live.jpg`, `14-rating-dialog-redesign.jpg`, `15-comic-detail-polished.jpg`).
+  - Đóng gói file JAR độc lập `comic-net-desktop-swing-0.1.0-SNAPSHOT.jar` BUILD SUCCESS.
+
+**Ưu tiên trước đó — Sửa Lỗi Đánh Giá Truyện (428 Precondition / ETag) & Thông Báo Bị Chặn (403 Forbidden) 2026-10-30:**
 - **Đã sửa triệt để lỗi không đánh giá truyện được:**
   - `RatingDialog.java`: Chuyển đúng endpoint `/api/v1/comics/{comic}/rating`.
   - Concurrency Control: Bổ sung header `If-None-Match: *` khi tạo mới đánh giá (`current == null`) và `If-Match: <etag>` khi cập nhật để thỏa mãn optimistic locking ETag của `RatingService`.
@@ -58,3 +92,6 @@ Mỗi phiên cập nhật trạng thái và Agent phụ trách gần nhất theo
 | M20-F09 hết hạn/thu hồi quyền & hoàn tiền/mua lại | Hoàn thành kiểm chứng: Flyway V27 đã migrate ComicNetDev; Entitlement revocation; balanced double-entry ledger refund; chống hoàn tiền kép (idempotency key); cho phép mua lại chương; Admin API GET /admin/purchases & POST /admin/purchases/{id}/refund; Swing AdminWalletPanel tab "Mua chương"; `ReaderFlowIT` 12/12 PASS trên SQL thật | Google Antigravity | M20-F10 hoặc các tính năng thanh toán tiếp theo theo roadmap Phase 4 |
 | Thanh toán nhà cung cấp thật, subscription, chính sách chống gian lận | Chưa xác nhận triển khai từ source phiên này | Chưa phân công | Xác định yêu cầu rồi triển khai theo roadmap |
 | Điều phối Codex–Antigravity | Bốn file điều phối được cập nhật sau khi Antigravity hoàn thành Reader UI & M20-F09 | Google Antigravity | Tiếp tục luân phiên phối hợp |
+
+**Tiếp nhận 2026-10-30 — OpenAI Codex:** Chưa sửa source/chạy test; bước tiếp theo xác minh thay đổi Antigravity mới nhất và tiếp tục UI/UX chưa hoàn tất.
+

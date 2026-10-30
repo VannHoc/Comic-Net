@@ -147,7 +147,8 @@ public class PublishingRepository {
   }
 
   public void requireDraft(long version) {
-    if (!version(version).state().equals("DRAFT") || activeUpload(version))
+    var state = version(version).state();
+    if ((!state.equals("DRAFT") && !state.equals("NEEDS_CHANGES")) || activeUpload(version))
       throw new DomainException(
           409, "VERSION_NOT_EDITABLE", "Version đang xử lý hoặc đã khóa nội dung.");
   }

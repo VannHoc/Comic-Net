@@ -149,6 +149,16 @@ public class SecurityConfiguration {
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/api/v1/assets")
                     .authenticated()
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/v1/comics/*/views",
+                        "/api/v1/chapters/*/completion")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/v1/comics/*/stats",
+                        "/api/v1/chapters/*/stats")
+                    .authenticated()
                     .anyRequest()
                     .denyAll())
         .exceptionHandling(

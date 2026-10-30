@@ -520,6 +520,62 @@ public final class UiIcons {
     });
   }
 
+  public static Icon image(int size, Color color) {
+    return new VectorIcon(size, size, (g2, w, h) -> {
+      g2.setColor(color);
+      g2.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+      g2.drawRoundRect((int)(w * 0.12f), (int)(h * 0.14f), (int)(w * 0.76f), (int)(h * 0.72f), 5, 5);
+      g2.fillOval((int)(w * 0.28f), (int)(h * 0.3f), (int)(w * 0.14f), (int)(h * 0.14f));
+      Path2D m = new Path2D.Float();
+      m.moveTo(w * 0.14f, h * 0.76f);
+      m.lineTo(w * 0.42f, h * 0.48f);
+      m.lineTo(w * 0.62f, h * 0.64f);
+      m.lineTo(w * 0.74f, h * 0.54f);
+      m.lineTo(w * 0.86f, h * 0.76f);
+      g2.draw(m);
+    });
+  }
+
+  public static Icon upload(int size, Color color) {
+    return new VectorIcon(size, size, (g2, w, h) -> {
+      g2.setColor(color);
+      g2.setStroke(new BasicStroke(1.7f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+      // Tray
+      Path2D tray = new Path2D.Float();
+      tray.moveTo(w * 0.18f, h * 0.62f);
+      tray.lineTo(w * 0.18f, h * 0.82f);
+      tray.lineTo(w * 0.82f, h * 0.82f);
+      tray.lineTo(w * 0.82f, h * 0.62f);
+      g2.draw(tray);
+      // Up arrow
+      g2.drawLine((int)(w * 0.5f), (int)(h * 0.68f), (int)(w * 0.5f), (int)(h * 0.18f));
+      Path2D arrow = new Path2D.Float();
+      arrow.moveTo(w * 0.32f, h * 0.34f);
+      arrow.lineTo(w * 0.5f, h * 0.18f);
+      arrow.lineTo(w * 0.68f, h * 0.34f);
+      g2.draw(arrow);
+    });
+  }
+
+  public static Icon alertCircle(int size, Color color) {
+    return new VectorIcon(size, size, (g2, w, h) -> {
+      g2.setColor(color);
+      g2.setStroke(new BasicStroke(1.7f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+      g2.drawOval((int)(w * 0.1f), (int)(h * 0.1f), (int)(w * 0.8f), (int)(h * 0.8f));
+      g2.drawLine((int)(w * 0.5f), (int)(h * 0.3f), (int)(w * 0.5f), (int)(h * 0.58f));
+      g2.fillOval((int)(w * 0.46f), (int)(h * 0.68f), (int)(w * 0.08f), (int)(h * 0.08f));
+    });
+  }
+
+  public static Icon close(int size, Color color) {
+    return new VectorIcon(size, size, (g2, w, h) -> {
+      g2.setColor(color);
+      g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+      g2.drawLine((int)(w * 0.25f), (int)(h * 0.25f), (int)(w * 0.75f), (int)(h * 0.75f));
+      g2.drawLine((int)(w * 0.75f), (int)(h * 0.25f), (int)(w * 0.25f), (int)(h * 0.75f));
+    });
+  }
+
   @FunctionalInterface
   private interface IconPainter {
     void paint(Graphics2D g2, int width, int height);
