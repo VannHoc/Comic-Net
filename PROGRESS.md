@@ -1,5 +1,21 @@
 # Comic Net — điểm tiếp nối
 
+**Checkpoint 2026-10-30 — Freebuff (Buffy), Sửa Lỗi Phân Quyền Creator: Không Thể Tạo/Lưu Truyện (HTTP 403 ACCESS_DENIED), Mở Không Gian Sáng Tác Cá Nhân & Cho Phép Sửa Nội Dung Bị Trả Lại (Service + HTTP IT PASS):**
+- **Agent:** Freebuff (Buffy); ngày: 2026-10-30.
+- **Triệu chứng:** Tài khoản `creator` bấm "Lưu bản nháp" / "Tiếp tục" ở bước 1 nhận `ApiClient$ApiFailure: Bạn không có quyền thực hiện thao tác này.`
+- **Nguyên nhân gốc (có bằng chứng DB thật):** `CatalogService.createAllowed` yêu cầu Creator phải là thành viên ACTIVE của một `CreatorTeam` có quyền `catalog.manage`, nếu không ném `DomainException.forbidden()` → 403 `ACCESS_DENIED` đúng chuỗi lỗi trên. Truy vấn `ComicNetDev`: user `creator` (Id 975, ACTIVE, roles `READER,CREATOR`) có **0 nhóm** (Teams = `-`), nên mọi `POST /api/v1/comics` đều bị chặn. Đây không phải lỗi `SecurityFilterChain` (nhánh `/api/v1/publishing/**` và `POST /api/v1/comics` chỉ yêu cầu `authenticated()`), cũng không phải lỗi `ROLE_CREATOR` vs `CREATOR` (`BearerAuthenticationFilter` map đúng `ROLE_` + role).
+- **Nguyên nhân phụ cùng luồng:** (1) `ComicTranslation.TeamId` là `NOT NULL` và quyền chương là theo nhóm, nên chỉ nới `createAllowed` vẫn gãy ở bước tạo bản dịch/chương; (2) `UploadCoordinator` chỉ cho upload khi version ở `DRAFT/FAILED`, trong khi `PublishingRepository.requireDraft` đã coi `NEEDS_CHANGES` là sửa được → Creator không thể bổ sung trang sau khi Admin yêu cầu sửa.
+- **File đã sửa:**
+  - `backend/src/main/java/com/comicnet/catalog/service/CatalogService.java`: `createAllowed` chỉ còn kiểm tra role `CREATOR`/`ADMINISTRATOR`; `create` tự đảm bảo không gian sáng tác cá nhân cho Creator.
+  - `backend/src/main/java/com/comicnet/creator/api/CreatorDirectory.java`: thêm `ensurePersonalTeam(Identity)`.
+  - `backend/src/main/java/com/comicnet/creator/service/SqlCreatorDirectory.java`: cấp phát idempotent nhóm cá nhân `creator-<userId>` với vai trò team `OWNER`+`CREATOR` (đúng bộ quyền có sẵn: `catalog.manage`, `chapter.draft/upload/preview/submit/publish`, `team.manage`), ghi audit `CREATOR_TEAM_PROVISIONED`; tái dùng nhóm đang dùng được nên không cấp lại quyền Admin đã gỡ.
+  - `backend/src/main/java/com/comicnet/publishing/service/UploadCoordinator.java`: tập `EDITABLE = DRAFT/FAILED/NEEDS_CHANGES` cho upload/retry.
+  - Test: `CatalogFlowIT`, `PublishingFlowIT` (thêm test), `CreatorAuthorizationHttpIT` (mới, kiểm thử qua MockMvc + filter chain thật).
+- **Bất biến bảo mật được giữ nguyên:** Creator vẫn không tự phê duyệt (`PublishingScope.reviewer` chỉ Admin; `SELF_REVIEW_DENIED`), không tự xuất bản nội dung chưa duyệt (`VERSION_NOT_PUBLISHABLE`), không xem/sửa truyện người khác, không đổi quyền người dùng; Reader vẫn 403; không đổi schema, không đổi Session Cookie + CSRF, không cấp Admin cho Creator.
+- **Bằng chứng kiểm thử:** `CreatorAuthorizationHttpIT` (1) + `CatalogFlowIT` (5) + `PublishingFlowIT` (7) = **13/13 PASS**. Cụ thể: creator `POST /api/v1/comics` → 201, `/me/teams` có 1 nhóm cá nhân, reader → 403 `ACCESS_DENIED`; Creator upload 2 trang, gửi duyệt, tự duyệt bị 403, xuất bản khi chưa duyệt bị 409, Admin yêu cầu sửa → Creator upload thêm trang → gửi lại → Admin duyệt → Creator xuất bản; Admin tạo truyện/duyệt, phê duyệt trực tiếp bản nháp, từ chối kèm lý do và gỡ xuất bản chương. Unit test backend: **29/29 PASS** (gồm `ApiContractTest` 174 operations, `ModuleBoundariesTest`).
+- **Chưa kiểm chứng:** Chưa đăng nhập được bằng chính tài khoản `creator`/`admin` trong DB dev (không có mật khẩu) nên **chưa QA giao diện Swing end-to-end**; kiểm thử HTTP dùng tài khoản fixture tạo trong transaction. Một số IT nền đỏ sẵn từ trước, đã đối chiếu trên worktree HEAD sạch (xem HANDOFF).
+- **Backend đã build lại và chạy:** JAR mới trên cổng 8080 (`/actuator/health` 200, `GET /api/v1/comics` 200, `POST /api/v1/comics` không token 401).
+
 **Checkpoint 2026-10-30 — Google Antigravity, Hoàn Thành Kiểm Toán Toàn Diện Mã Nguồn & Xây Dựng Trọn Bộ 13 Tài Liệu Bảo Vệ Đồ Án (Báo Cáo + 13 Chuyên Đề Defense PASS 100%):**
 - **Agent:** Google Antigravity; ngày: 2026-10-30.
 - **Nội dung thực hiện:**

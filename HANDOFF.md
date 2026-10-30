@@ -1,5 +1,21 @@
 # Bàn giao gần nhất
 
+## Phiên 2026-10-30 — Freebuff (Buffy): Sửa lỗi phân quyền Creator (403 khi tạo/lưu truyện)
+
+- **Agent:** Freebuff (Buffy); ngày: 2026-10-30.
+- **Nguyên nhân gốc:** `CatalogService.createAllowed` chặn Creator nếu không thuộc nhóm ACTIVE có quyền `catalog.manage`. Bằng chứng DB `ComicNetDev`: user `creator` (Id 975, ACTIVE, `READER,CREATOR`) có 0 nhóm → `POST /api/v1/comics` trả 403 `ACCESS_DENIED` (chính là chuỗi lỗi hiển thị trên Swing). Không phải lỗi Spring Security: `/api/v1/publishing/**`, `POST /api/v1/comics` chỉ yêu cầu `authenticated()`, và authority đã là `ROLE_CREATOR`.
+- **Đã sửa:**
+  - `CatalogService.createAllowed`: chỉ cần role `CREATOR` (hoặc Admin).
+  - `CatalogService.create`: gọi `CreatorDirectory.ensurePersonalTeam(actor)` cho Creator không phải Admin — cần thiết vì `ComicTranslation.TeamId` NOT NULL và quyền chương theo nhóm.
+  - `SqlCreatorDirectory`: `ensurePersonalTeam` idempotent (tạo/tái dùng nhóm `creator-<userId>`, membership ACTIVE, vai trò team OWNER+CREATOR, audit `CREATOR_TEAM_PROVISIONED`).
+  - `UploadCoordinator`: cho upload/retry khi version `NEEDS_CHANGES` (trước đó chỉ `DRAFT/FAILED`, nên không sửa được nội dung bị yêu cầu sửa).
+- **Không thay đổi:** schema DB, Session Cookie + CSRF, `SecurityFilterChain`, quyền Admin; Creator vẫn không tự duyệt (`reviewer` chỉ Admin + `SELF_REVIEW_DENIED`) và không tự xuất bản nội dung chưa duyệt (`VERSION_NOT_PUBLISHABLE`).
+- **Test đã chạy:** `CreatorAuthorizationHttpIT` 1/1, `CatalogFlowIT` 5/5, `PublishingFlowIT` 7/7, unit backend 29/29 — PASS. Backend JAR build lại và đang chạy cổng 8080.
+- **Test chưa chạy:** QA giao diện Swing end-to-end bằng tài khoản `creator`/`admin` thật (không có mật khẩu trong phiên này). Cần đăng nhập lại và chạy checklist: tạo truyện → upload bìa → lưu nháp → thêm chương + nhiều ảnh → gửi duyệt → tự duyệt bị từ chối → sửa truyện người khác bị từ chối; Admin tạo truyện, xuất bản trực tiếp, duyệt/từ chối, gỡ xuất bản.
+- **IT đỏ sẵn từ trước, KHÔNG do phiên này** (đã tái hiện y hệt trên worktree HEAD sạch `aeabb32`): `AnalyticsPublishingFlowIT.validReadsDedupePerDayFeedRankingsAndCompletionRate` (xếp hạng toàn cục bị dữ liệu DB dev lấn), `GamificationFlowIT.dailyCheckInAwardsExpAndCoinsAndPreventsDoubleCheckIn` (idempotency key còn trong DB), `IdentityConcurrencyIT`/`ReadingConcurrencyIT` (dọn fixture vướng FK `AccountEmailOtp`), `RatingFlowIT.similarComicsPreferMatchingContentAndExcludeSource`. Trong đó `RatingFlowIT` phản ánh lỗi thật trong `CatalogService.similar` (SQL có `AND ORDER BY`).
+- **Bước kế tiếp:** (1) QA Swing với tài khoản thật; (2) sửa lỗi SQL `CatalogService.similar`; (3) dọn fixture/idempotency sót trong DB dev để bộ IT xanh lại. Không xóa dữ liệu truyện/chương/tài khoản hiện có.
+- **Script tiện ích trong phiên (không commit, thư mục `.local/scripts/`):** `check-creator-authz.ps1` (đọc role/nhóm/quyền), `run-backend-tests.ps1` (nạp credential local rồi chạy `-Dtest=...`). Không chứa mật khẩu; credential đọc từ file provision local đã gitignore.
+
 ## Phiên 2026-10-30 — Google Antigravity: Hoàn Thành Toàn Diện Kiểm Toán Lịch Sử & Xây Dựng Trọn Bộ 13 Tài Liệu Bảo Vệ Đồ Án Comic Net
 
 - **Agent:** Google Antigravity; ngày: 2026-10-30.

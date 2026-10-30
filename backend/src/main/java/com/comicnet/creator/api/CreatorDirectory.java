@@ -17,6 +17,9 @@ public interface CreatorDirectory {
 
   Team create(Identity actor, TeamCreate request, String key);
 
+  /** Personal creator workspace; idempotent and only for accounts holding the CREATOR role. */
+  long ensurePersonalTeam(Identity actor);
+
   Member member(Identity actor, long teamId, long userId);
 
   Member setMember(

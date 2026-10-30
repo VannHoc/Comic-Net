@@ -340,4 +340,175 @@ class PublishingFlowIT {
         .isInstanceOfSatisfying(
             DomainException.class, e -> assertThat(e.code()).isEqualTo("VERSION_PARENT_MISMATCH"));
   }
+
+  @Test
+  void creatorWithoutTeamRunsOwnWorkflowThroughPersonalWorkspace() throws Exception {
+    Identity admin = actors.administrator(), creator = actors.creator(admin);
+    assertThat(teams.teamIds(creator, "catalog.manage")).isEmpty();
+    var input =
+        new ComicInput(
+            "Truyện cá nhân",
+            "personal-" + key(),
+            "Mô tả",
+            "MANGA",
+            "VN",
+            "ONGOING",
+            "ALL_AGE",
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            null,
+            null);
+    long comic = Ids.parse(catalog.create(creator, input, key()).id());
+    long team = teams.teamIds(creator, "catalog.manage").getFirst();
+    long translation =
+        Ids.parse(
+            catalog
+                .createTranslation(
+                    creator, comic, new TranslationCreate(team + "", "vi", "main", null), key())
+                .id());
+    long chapter =
+        Ids.parse(
+            publishing
+                .createChapter(
+                    creator,
+                    translation,
+                    new ChapterInput(null, "1", "Chương một", "1", "FREE"),
+                    key())
+                .id());
+    long version =
+        Ids.parse(publishing.createVersion(creator, chapter, new VersionCreate(null), key()).id());
+    for (byte[] page : List.of(image(11), image(22))) {
+      var job =
+          uploads.accept(
+              creator,
+              version,
+              new MockMultipartFile("file", "page.png", "image/png", page),
+              null,
+              Etags.of(publishing.versionToken(version)),
+              key());
+      jobs.add(Ids.parse(job.id()));
+      assertThat(worker.processJob(Ids.parse(job.id()))).isTrue();
+    }
+    assertThat(publishing.version(creator, version).pages()).hasSize(2);
+    publishing.submit(creator, version, Etags.of(publishing.versionToken(version)));
+    assertThatThrownBy(
+            () ->
+                publishing.review(
+                    creator,
+                    version,
+                    new Review("APPROVE", null),
+                    Etags.of(publishing.versionToken(version))))
+        .isInstanceOfSatisfying(DomainException.class, e -> assertThat(e.status()).isEqualTo(403));
+    assertThatThrownBy(
+            () ->
+                publishing.publish(
+                    creator,
+                    chapter,
+                    new Publish(version + ""),
+                    Etags.of(publishing.chapterToken(chapter))))
+        .isInstanceOfSatisfying(
+            DomainException.class, e -> assertThat(e.code()).isEqualTo("VERSION_NOT_PUBLISHABLE"));
+    publishing.review(
+        admin,
+        version,
+        new Review("REQUEST_CHANGES", "Bổ sung trang bìa"),
+        Etags.of(publishing.versionToken(version)));
+    assertThat(publishing.version(creator, version).state()).isEqualTo("NEEDS_CHANGES");
+    // Content sent back for fixes stays editable, so the creator can upload and resubmit.
+    var fix =
+        uploads.accept(
+            creator,
+            version,
+            new MockMultipartFile("file", "page.png", "image/png", image(33)),
+            null,
+            Etags.of(publishing.versionToken(version)),
+            key());
+    jobs.add(Ids.parse(fix.id()));
+    assertThat(worker.processJob(Ids.parse(fix.id()))).isTrue();
+    assertThat(publishing.version(creator, version).pages()).hasSize(3);
+    publishing.submit(creator, version, Etags.of(publishing.versionToken(version)));
+    publishing.review(
+        admin,
+        version,
+        new Review("APPROVE", null),
+        Etags.of(publishing.versionToken(version)));
+    publishing.publish(
+        creator, chapter, new Publish(version + ""), Etags.of(publishing.chapterToken(chapter)));
+    assertThat(publishing.chapter(creator, chapter).publishedVersionId()).isEqualTo(version + "");
+  }
+
+  @Test
+  void adminPublishesDirectlyRejectsAndUnpublishesCreatorContent() throws Exception {
+    Identity admin = actors.administrator(), creator = actors.creator(admin);
+    var input =
+        new ComicInput(
+            "Truyện admin duyệt",
+            "admin-" + key(),
+            "Mô tả",
+            "MANGA",
+            "VN",
+            "ONGOING",
+            "ALL_AGE",
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            null,
+            null);
+    long comic = Ids.parse(catalog.create(creator, input, key()).id());
+    long team = teams.teamIds(creator, "catalog.manage").getFirst();
+    long translation =
+        Ids.parse(
+            catalog
+                .createTranslation(
+                    creator, comic, new TranslationCreate(team + "", "vi", "main", null), key())
+                .id());
+    long chapter =
+        Ids.parse(
+            publishing
+                .createChapter(
+                    creator,
+                    translation,
+                    new ChapterInput(null, "1", "Chương một", "1", "FREE"),
+                    key())
+                .id());
+    long version =
+        Ids.parse(publishing.createVersion(creator, chapter, new VersionCreate(null), key()).id());
+    var job =
+        uploads.accept(
+            creator,
+            version,
+            new MockMultipartFile("file", "page.png", "image/png", image(7)),
+            null,
+            Etags.of(publishing.versionToken(version)),
+            key());
+    jobs.add(Ids.parse(job.id()));
+    assertThat(worker.processJob(Ids.parse(job.id()))).isTrue();
+    // Admin publishes an unreviewed draft directly, without self-approval.
+    publishing.publish(
+        admin, chapter, new Publish(version + ""), Etags.of(publishing.chapterToken(chapter)));
+    assertThat(publishing.chapter(admin, chapter).publishedVersionId()).isEqualTo(version + "");
+    long next =
+        Ids.parse(publishing.createVersion(creator, chapter, new VersionCreate(null), key()).id());
+    publishing.submit(creator, next, Etags.of(publishing.versionToken(next)));
+    publishing.review(
+        admin,
+        next,
+        new Review("REJECT", "Thiếu trang bìa"),
+        Etags.of(publishing.versionToken(next)));
+    assertThat(publishing.version(creator, next).state()).isEqualTo("REJECTED");
+    publishing.unpublish(
+        admin,
+        chapter,
+        new Reason("Vi phạm bản quyền"),
+        Etags.of(publishing.chapterToken(chapter)));
+    assertThat(publishing.chapter(admin, chapter).visibility()).isEqualTo("HIDDEN");
+    assertThat(publishing.version(admin, version).state()).isEqualTo("UNPUBLISHED");
+  }
 }

@@ -160,6 +160,58 @@ class CatalogFlowIT {
   }
 
   @Test
+  void creatorWithoutTeamStillCreatesOwnDraftWithPersonalWorkspace() {
+    Identity admin = actors.administrator(),
+        owner = actors.creator(admin),
+        other = actors.creator(admin);
+    assertThat(teams.teamIds(owner, "catalog.manage")).isEmpty();
+    var comic = catalog.create(owner, input("Bản nháp", "draft-" + key(), "ALL_AGE"), key());
+    long id = Ids.parse(comic.id());
+    assertThat(comic.ownerUserId()).isEqualTo(owner.userId() + "");
+    assertThat(teams.teamIds(owner, "catalog.manage")).isNotEmpty();
+    long team = teams.teamIds(owner, "catalog.manage").getFirst();
+    assertThat(teams.has(owner, team, "chapter.draft")).isTrue();
+    assertThat(teams.has(owner, team, "chapter.submit")).isTrue();
+    var translation =
+        catalog.createTranslation(
+            owner, id, new TranslationCreate(team + "", "vi", "main", null), key());
+    assertThat(catalog.translation(owner, Ids.parse(translation.id())).teamId())
+        .isEqualTo(team + "");
+    assertThat(catalog.managedDetail(owner, id).title()).isEqualTo("Bản nháp");
+    catalog.patch(
+        owner, id, json.readTree("{\"title\":\"Bản nháp 2\"}"), Etags.of(catalog.version(id)));
+    assertThat(catalog.managedDetail(owner, id).title()).isEqualTo("Bản nháp 2");
+    // Creator still cannot publish without review, touch another author's comic or manage accounts.
+    assertThatThrownBy(
+            () ->
+                catalog.visibility(
+                    owner,
+                    id,
+                    new VisibilityPut("PUBLIC", "self publish"),
+                    Etags.of(catalog.version(id))))
+        .isInstanceOf(DomainException.class);
+    assertThatThrownBy(() -> catalog.managedDetail(other, id)).isInstanceOf(DomainException.class);
+    assertThatThrownBy(
+            () ->
+                catalog.patch(
+                    other,
+                    id,
+                    json.readTree("{\"title\":\"Hijack\"}"),
+                    Etags.of(catalog.version(id))))
+        .isInstanceOf(DomainException.class);
+    assertThatThrownBy(
+            () ->
+                catalog.createTranslation(
+                    other, id, new TranslationCreate(team + "", "vi", "other", null), key()))
+        .isInstanceOf(DomainException.class);
+    // A reader without the CREATOR role keeps the original authorization failure.
+    Identity reader = actors.reader();
+    assertThatThrownBy(
+            () -> catalog.create(reader, input("Trái phép", "reader-" + key(), "ALL_AGE"), key()))
+        .isInstanceOfSatisfying(DomainException.class, e -> assertThat(e.status()).isEqualTo(403));
+  }
+
+  @Test
   void metadataReferencesAndCreateIdempotencyAreReal() {
     Identity admin = actors.administrator();
     String suffix = key();

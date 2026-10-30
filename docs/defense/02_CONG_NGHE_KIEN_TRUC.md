@@ -64,7 +64,9 @@ graph TD
 2. **Dùng để làm gì?** Xây dựng toàn bộ giao diện tương tác người dùng trên máy tính (Desktop Client): từ cửa sổ đăng nhập, bảng điều khiển Trang chủ, bộ đọc truyện đến Xưởng xuất bản và công cụ quản trị.
 3. **Vì sao dự án sử dụng?** Đồ án yêu cầu bảo vệ và trình diễn trực tiếp trên máy tính thông qua NetBeans mà không cần cài đặt Node.js hay mở trình duyệt web. Swing kết hợp FlatLaf giúp giao diện mượt mà, hỗ trợ tốt màn hình độ phân giải cao (HiDPI Scaling 100%, 125%, 150%) và bảng màu hiện đại chuẩn Figma.
 4. **Khác gì JavaFX hoặc SWT?** Java Swing được tích hợp sẵn 100% trong JDK tiêu chuẩn, không phụ thuộc thư viện native C++ phức tạp của JavaFX trên các nền tảng máy tính khác nhau, tương thích tuyệt đối với NetBeans GUI Builder.
-5. **Xuất hiện ở file nào?** [desktop-swing/pom.xml](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/desktop-swing/pom.xml#L15), [DesktopApplication.java](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/desktop-swing/src/main/java/com/comicnet/desktop/DesktopApplication.java#L24), [Theme.java](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/desktop-swing/src/main/java/com/comicnet/desktop/ui/Theme.java).
+5. **Xuất hiện ở file nào?** 
+[desktop-swing/pom.xml](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/desktop-swing/pom.xml#L15), [DesktopApplication.java](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/desktop-swing/src/main/java/com/comicnet/desktop/DesktopApplication.java#L24), 
+[Theme.java](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/desktop-swing/src/main/java/com/comicnet/desktop/ui/Theme.java).
 6. **Tham gia vào luồng nào?** Hiển thị màn hình, tiếp nhận các sự kiện chuột/phím của người dùng thông qua Event Dispatch Thread (EDT).
 7. **Nếu bỏ thì ảnh hưởng gì?** Không có giao diện Desktop để người dùng tương tác và trình diễn đồ án.
 
@@ -75,7 +77,10 @@ graph TD
 2. **Dùng để làm gì?** Quản lý toàn bộ vòng đời ứng dụng phía backend: nạp cấu hình, khởi tạo máy chủ HTTP nhúng (Embedded Apache Tomcat), xử lý Dependency Injection (Spring IoC), định tuyến REST API và quản lý giao dịch dữ liệu.
 3. **Vì sao dự án sử dụng?** Cung cấp mô hình tự động cấu hình (Auto-configuration), loại bỏ việc viết hàng nghìn dòng cấu hình XML rườm rà; tích hợp sẵn Actuator kiểm tra trạng thái sức khỏe máy chủ.
 4. **Khác gì Java Servlet thuần hoặc Quarkus/Micronaut?** Spring Boot có cộng đồng hỗ trợ lớn nhất thế giới, tài liệu phong phú, tính ổn định cao và tích hợp liền mạch với Spring Security, Spring Data JPA.
-5. **Xuất hiện ở file nào?** [pom.xml](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/pom.xml#L6), [backend/pom.xml](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/backend/pom.xml), [ComicNetApplication.java](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/backend/src/main/java/com/comicnet/ComicNetApplication.java).
+5. **Xuất hiện ở file nào?** 
+[pom.xml](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/pom.xml#L6), 
+[backend/pom.xml](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/backend/pom.xml), 
+[ComicNetApplication.java](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/backend/src/main/java/com/comicnet/ComicNetApplication.java).
 6. **Tham gia vào luồng nào?** Tiếp nhận và điều phối mọi yêu cầu mạng từ Desktop gửi đến cổng 8080.
 7. **Nếu bỏ thì ảnh hưởng gì?** Không có máy chủ web phía sau để xử lý nghiệp vụ, lưu trữ và xác thực.
 
@@ -86,7 +91,9 @@ graph TD
 2. **Dùng để làm gì?** Chặn và kiểm tra mọi HTTP Request gửi tới backend: xác thực danh tính (Authentication) qua Bearer Token hoặc Session Cookie, phân quyền theo vai trò (Authorization RBAC: Reader, Creator, Administrator), chống giả mạo nguồn gốc truy cập.
 3. **Vì sao dự án sử dụng?** Giúp tách biệt hoàn toàn logic an ninh ra khỏi logic nghiệp vụ của các controller thông qua mô hình mắt xích bộ lọc (Filter Chain).
 4. **Khác gì tự viết hàm `checkAuth()` trong từng Controller?** Tự viết trong Controller rất dễ bỏ sót các lỗ hổng truy cập trái phép ở các endpoint mới; Spring Security chặn ngay từ cửa ngõ mạng trước khi yêu cầu chạm vào Controller (`Security-by-Default`).
-5. **Xuất hiện ở file nào?** [SecurityConfiguration.java](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/backend/src/main/java/com/comicnet/config/SecurityConfiguration.java), [BearerAuthenticationFilter.java](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/backend/src/main/java/com/comicnet/identity/controller/BearerAuthenticationFilter.java).
+5. **Xuất hiện ở file nào?** 
+[SecurityConfiguration.java](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/backend/src/main/java/com/comicnet/config/SecurityConfiguration.java), 
+[BearerAuthenticationFilter.java](file:///c:/Users/studi/OneDrive/Documents/Tools/Comic%20Net/backend/src/main/java/com/comicnet/identity/controller/BearerAuthenticationFilter.java).
 6. **Tham gia vào luồng nào?** Mọi luồng API: Từ đăng nhập, đọc chương trả phí đến kiểm duyệt nội dung của Admin.
 7. **Nếu bỏ thì ảnh hưởng gì?** Bất kỳ ai cũng có thể gọi thẳng vào các API nhạy cảm của Admin hoặc nạp/rút xu trái phép mà không bị chặn.
 

@@ -17,6 +17,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class UploadCoordinator implements com.comicnet.publishing.api.UploadJobs {
+  /** Working copies stay editable after a reviewer requests changes, exactly like a fresh draft. */
+  private static final Set<String> EDITABLE = Set.of("DRAFT", "FAILED", "NEEDS_CHANGES");
   private final JdbcTemplate jdbc;
   private final PublishingRepository data;
   private final PublishingScope scopes;
@@ -91,8 +93,7 @@ public class UploadCoordinator implements com.comicnet.publishing.api.UploadJobs
                   Map.of("sha256", hash, "pageId", replacePage == null ? "" : replacePage),
                   () -> {
                     var current = data.version(version);
-                    if (!Set.of("DRAFT", "FAILED").contains(current.state())
-                        || data.activeUpload(version))
+                    if (!EDITABLE.contains(current.state()) || data.activeUpload(version))
                       throw new DomainException(
                           409, "VERSION_NOT_EDITABLE", "Version đang xử lý hoặc đã khóa nội dung.");
                     Etags.require(etag, data.versionToken(version));
@@ -143,8 +144,7 @@ public class UploadCoordinator implements com.comicnet.publishing.api.UploadJobs
                   if (Boolean.TRUE.equals(latest.get("StagingReady"))
                       || !Set.of("QUEUED", "FAILED").contains(latest.get("Status"))) return false;
                   if (latest.get("Status").equals("FAILED")) {
-                    if (!Set.of("DRAFT", "FAILED").contains(data.version(version).state()))
-                      return false;
+                    if (!EDITABLE.contains(data.version(version).state())) return false;
                     if (data.activeUpload(version))
                       throw new DomainException(
                           409, "UPLOAD_ACTIVE", "Version đang có một upload khác.");
@@ -216,7 +216,7 @@ public class UploadCoordinator implements com.comicnet.publishing.api.UploadJobs
                 var current = data.job(id);
                 if (!current.status().equals("FAILED")
                     || data.activeUpload(version)
-                    || !Set.of("DRAFT", "FAILED").contains(data.version(version).state()))
+                    || !EDITABLE.contains(data.version(version).state()))
                   throw new DomainException(
                       409,
                       "JOB_NOT_RETRYABLE",

@@ -128,6 +128,85 @@ public class SqlCreatorDirectory implements CreatorDirectory {
     return team(id);
   }
 
+  /**
+   * Creator self-service workspace. Every translation and chapter permission is team-scoped, so a
+   * creator who owns no active team is given a personal one instead of being locked out of their
+   * own drafts. Reuses any usable team, so it never grants roles or permissions an admin removed.
+   */
+  @Transactional
+  public long ensurePersonalTeam(Identity actor) {
+    if (actor == null) throw DomainException.unauthorized();
+    if (!actor.roles().contains("CREATOR")) throw DomainException.forbidden();
+    var usable = teamIds(actor, "catalog.manage");
+    if (!usable.isEmpty()) return usable.getFirst();
+    var owned =
+        jdbc.queryForList(
+            "SELECT Id FROM dbo.CreatorTeam WHERE OwnerUserId=? AND Status='ACTIVE' ORDER BY Id",
+            Long.class,
+            actor.userId());
+    long team = owned.isEmpty() ? personalTeam(actor) : owned.getFirst();
+    attachOwner(team, actor.userId());
+    if (teamIds(actor, "catalog.manage").isEmpty())
+      throw new DomainException(
+          403, "CREATOR_WORKSPACE_UNAVAILABLE", "Không thể mở không gian sáng tác cá nhân.");
+    return team;
+  }
+
+  private long personalTeam(Identity actor) {
+    String handle =
+        jdbc.queryForList(
+                "SELECT Username FROM dbo.[User] WHERE Id=?", String.class, actor.userId())
+            .stream()
+            .filter(java.util.Objects::nonNull)
+            .findFirst()
+            .orElse("#" + actor.userId());
+    String name = "Không gian của " + handle;
+    if (name.length() > 200) name = name.substring(0, 200);
+    String base = "creator-" + actor.userId();
+    String slug = base;
+    for (int suffix = 1;
+        jdbc.queryForObject(
+                "SELECT COUNT(*) FROM dbo.CreatorTeam WHERE Slug=?", Integer.class, slug)
+            > 0;
+        suffix++) {
+      if (suffix > 50)
+        throw new DomainException(
+            409, "CREATOR_WORKSPACE_UNAVAILABLE", "Không thể tạo không gian sáng tác cá nhân.");
+      slug = base + "-" + suffix;
+    }
+    long team =
+        jdbc.queryForObject(
+            "INSERT dbo.CreatorTeam(OwnerUserId,Name,Slug) OUTPUT INSERTED.Id VALUES(?,?,?)",
+            Long.class,
+            actor.userId(),
+            name,
+            slug);
+    audit.record(actor.userId(), "CREATOR_TEAM_PROVISIONED", "CreatorTeam", team + "", "SUCCESS");
+    return team;
+  }
+
+  private void attachOwner(long team, long user) {
+    var members =
+        jdbc.queryForList(
+            "SELECT Id FROM dbo.TeamMember WHERE TeamId=? AND UserId=?", Long.class, team, user);
+    long member =
+        members.isEmpty()
+            ? jdbc.queryForObject(
+                "INSERT dbo.TeamMember(TeamId,UserId,Status) OUTPUT INSERTED.Id"
+                    + " VALUES(?,?,'ACTIVE')",
+                Long.class,
+                team,
+                user)
+            : members.getFirst();
+    jdbc.update("UPDATE dbo.TeamMember SET Status='ACTIVE' WHERE Id=?", member);
+    jdbc.update(
+        "INSERT dbo.TeamMemberRole(MemberId,TeamRoleId) SELECT ?,Id FROM dbo.TeamRole r WHERE"
+            + " r.Code IN ('OWNER','CREATOR') AND NOT EXISTS(SELECT 1 FROM dbo.TeamMemberRole mr"
+            + " WHERE mr.MemberId=? AND mr.TeamRoleId=r.Id)",
+        member,
+        member);
+  }
+
   private Member membership(long teamId, long userId) {
     var rows =
         jdbc.queryForList(

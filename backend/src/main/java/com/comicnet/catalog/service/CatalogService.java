@@ -217,14 +217,16 @@ public class CatalogService implements CatalogAccess, CatalogQueries {
 
   private void createAllowed(Identity actor) {
     if (actor == null) throw DomainException.unauthorized();
-    if (!actor.administrator()
-        && (!actor.roles().contains("CREATOR") || teams.teamIds(actor, "catalog.manage").isEmpty()))
+    if (!actor.administrator() && !actor.roles().contains("CREATOR"))
       throw DomainException.forbidden();
   }
 
   @Transactional
   public ComicDetail create(Identity actor, ComicInput input, String key) {
     createAllowed(actor);
+    // Translations and the chapter permissions creators need are team-scoped, so a creator who
+    // owns no active team receives a personal workspace instead of a 403 on the whole workflow.
+    if (!actor.administrator()) teams.ensurePersonalTeam(actor);
     validateInput(actor, actor.userId(), input);
     long id =
         idempotency.create(

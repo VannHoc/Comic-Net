@@ -2,6 +2,12 @@
 
 Mỗi phiên cập nhật trạng thái và Agent phụ trách gần nhất theo bằng chứng. `PASS` ở đây không mặc nhiên là nghiệm thu toàn bộ giao diện.
 
+**Vừa hoàn thành — Sửa lỗi phân quyền Creator không tạo/lưu được truyện (2026-10-30 - Freebuff/Buffy):**
+- **Đã code + test tự động PASS:** `CatalogService.createAllowed` bỏ ràng buộc "Creator phải thuộc nhóm có `catalog.manage`" (nguyên nhân 403 `ACCESS_DENIED`); Creator không có nhóm được cấp không gian sáng tác cá nhân qua `CreatorDirectory.ensurePersonalTeam`; upload chương cho version `NEEDS_CHANGES` được mở lại (`UploadCoordinator`).
+- **Test đã chạy:** `CreatorAuthorizationHttpIT` (HTTP + filter chain thật) 1/1, `CatalogFlowIT` 5/5, `PublishingFlowIT` 7/7 (gồm luồng Admin duyệt trực tiếp/từ chối/gỡ xuất bản), unit backend 29/29 — tất cả PASS.
+- **Chưa kiểm chứng:** QA giao diện Swing bằng tài khoản `creator` và `admin` thật (không có mật khẩu trong phiên này); cần người dùng đăng nhập lại và chạy checklist mục 4 của yêu cầu.
+- **Việc còn mở (phát hiện khi kiểm thử, không do thay đổi này):** `CatalogService.similar` có lỗi cú pháp SQL (`... DeletedAt IS NULL AND ORDER BY`) làm `RatingFlowIT.similarComicsPreferMatchingContentAndExcludeSource` đỏ sẵn; các IT `AnalyticsPublishingFlowIT`, `GamificationFlowIT`, `IdentityConcurrencyIT`, `ReadingConcurrencyIT` đỏ do dữ liệu/idempotency còn lại trong DB dev — đã tái hiện y hệt trên HEAD sạch.
+
 **Ưu tiên vừa hoàn thành — Kiểm Toán Toàn Diện Repository & Xây Dựng Trọn Bộ 13 Tài Liệu Bảo Vệ Đồ Án Comic Net (2026-10-30 - Google Antigravity):**
 - **Hoàn thành kiểm toán toàn diện mã nguồn & lịch sử:**
   - Nghiên cứu từ tài liệu gốc prj_app.md, srs.md đến mã nguồn commit c30c6be.
